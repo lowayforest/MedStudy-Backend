@@ -1,0 +1,2004 @@
+openapi: 3.1.0
+info:
+  title: MedStudy API
+  version: 1.0.0-draft
+  description: >-
+    Contract-first API for the Go backend. Timestamps are Unix epoch milliseconds
+    for compatibility with the existing React application.
+servers:
+  - url: http://localhost:8080
+    description: Local
+  - url: https://api-staging.medstudy.a-void.cn
+    description: Staging
+  - url: https://api.medstudy.a-void.cn
+    description: Production
+tags:
+  - name: System
+  - name: Auth
+  - name: Account
+  - name: Bootstrap
+  - name: Folders
+  - name: Documents
+  - name: Flashcards
+  - name: Reviews
+  - name: Quick quizzes
+  - name: Errors
+  - name: AI
+  - name: Dashboard
+  - name: Backups
+  - name: Migration
+security:
+  - bearerAuth: []
+paths:
+  /health/live:
+    get:
+      tags: [System]
+      operationId: live
+      security: []
+      responses:
+        "200":
+          description: Process is alive
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+  /health/ready:
+    get:
+      tags: [System]
+      operationId: ready
+      security: []
+      responses:
+        "200":
+          description: Required dependencies are ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /api/v1/version:
+    get:
+      tags: [System]
+      operationId: getVersion
+      security: []
+      responses:
+        "200":
+          description: Build information
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VersionResponse"
+  /api/v1/auth/register:
+    post:
+      tags: [Auth]
+      operationId: register
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Registered and signed in
+          headers:
+            Set-Cookie:
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Signed in
+          headers:
+            Set-Cookie:
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/auth/refresh:
+    post:
+      tags: [Auth]
+      operationId: refreshSession
+      security:
+        - refreshCookie: []
+      responses:
+        "200":
+          description: Access token refreshed and refresh token rotated
+          headers:
+            Set-Cookie:
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logout
+      security:
+        - refreshCookie: []
+      responses:
+        "204":
+          description: Session revoked and cookie cleared
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/me:
+    get:
+      tags: [Account]
+      operationId: getMe
+      responses:
+        "200":
+          description: Current account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        default:
+          $ref: "#/components/responses/Error"
+    patch:
+      tags: [Account]
+      operationId: updateMe
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [timezone]
+              properties:
+                timezone: { type: string, example: Asia/Shanghai }
+      responses:
+        "200":
+          description: Updated account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/me/ai-credential:
+    put:
+      tags: [Account]
+      operationId: putAICredential
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [provider, apiKey]
+              properties:
+                provider: { type: string, const: deepseek }
+                apiKey: { type: string, minLength: 8, maxLength: 512, writeOnly: true }
+      responses:
+        "200":
+          description: Credential encrypted and stored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AICredentialResponse"
+        default:
+          $ref: "#/components/responses/Error"
+    delete:
+      tags: [Account]
+      operationId: deleteAICredential
+      responses:
+        "204": { description: Personal AI credential removed }
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/bootstrap:
+    get:
+      tags: [Bootstrap]
+      operationId: getBootstrap
+      responses:
+        "200":
+          description: Full compatibility snapshot for the current account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BootstrapResponse"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/folders:
+    get:
+      tags: [Folders]
+      operationId: listFolders
+      parameters:
+        - $ref: "#/components/parameters/FolderType"
+      responses:
+        "200":
+          description: Folder list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FolderListResponse"
+        default:
+          $ref: "#/components/responses/Error"
+    post:
+      tags: [Folders]
+      operationId: createFolder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FolderInput"
+      responses:
+        "201":
+          description: Folder created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FolderResponse"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/folders/{folderId}:
+    parameters:
+      - $ref: "#/components/parameters/FolderID"
+    get:
+      tags: [Folders]
+      operationId: getFolder
+      responses:
+        "200":
+          description: Folder detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FolderResponse"
+        "404": { $ref: "#/components/responses/NotFound" }
+        default: { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [Folders]
+      operationId: updateFolder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 100 }
+      responses:
+        "200":
+          description: Folder renamed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FolderResponse" }
+        default: { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [Folders]
+      operationId: deleteFolder
+      responses:
+        "204": { description: Folder and its documents deleted }
+        default: { $ref: "#/components/responses/Error" }
+  /api/v1/documents:
+    get:
+      tags: [Documents]
+      operationId: listDocuments
+      parameters:
+        - $ref: "#/components/parameters/FolderIDQuery"
+        - $ref: "#/components/parameters/FolderType"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+        - name: includeContent
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        "200":
+          description: Paginated documents
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DocumentListResponse" }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      tags: [Documents]
+      operationId: createDocumentFromText
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DocumentInput" }
+      responses:
+        "201":
+          description: Parsed text stored
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DocumentResponse" }
+        default: { $ref: "#/components/responses/Error" }
+  /api/v1/documents/import:
+    post:
+      tags: [Documents]
+      operationId: importDocuments
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [folderId, files]
+              properties:
+                folderId: { $ref: "#/components/schemas/UUID" }
+                files:
+                  type: array
+                  minItems: 1
+                  maxItems: 10
+                  items: { type: string, format: binary }
+      responses:
+        "200":
+          description: Per-file import results
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DocumentImportResponse" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        default: { $ref: "#/components/responses/Error" }
+  /api/v1/documents/{documentId}:
+    parameters:
+      - $ref: "#/components/parameters/DocumentID"
+    get:
+      tags: [Documents]
+      operationId: getDocument
+      responses:
+        "200":
+          description: Document with full content
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DocumentResponse" }
+        default: { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [Documents]
+      operationId: updateDocument
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 255 }
+      responses:
+        "200":
+          description: Document renamed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DocumentResponse" }
+        default: { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [Documents]
+      operationId: deleteDocument
+      responses:
+        "204": { description: Document deleted }
+        default: { $ref: "#/components/responses/Error" }
+  /api/v1/flashcards:
+    get:
+      tags: [Flashcards]
+      operationId: listFlashcards
+      parameters:
+        - { name: due, in: query, schema: { type: boolean } }
+        - { name: weak, in: query, schema: { type: boolean } }
+        - $ref: "#/components/parameters/FolderIDQuery"
+        - { name: originType, in: query, schema: { $ref: "#/components/schemas/OriginType" } }
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Paginated cards
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FlashcardListResponse" }
+        default: { $ref: "#/components/responses/Error" }
+  /api/v1/flashcards/bulk:
+    post:
+      tags: [Flashcards]
+      operationId: createFlashcards
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [cards]
+              properties:
+                cards:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items: { $ref: "#/components/schemas/FlashcardDraft" }
+      responses:
+        "200":
+          description: Added and deduplicated cards
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AddFlashcardsResponse" }
+        default: { $ref: "#/components/responses/Error" }
+  /api/v1/flashcards/{cardId}:
+    parameters:
+      - $ref: "#/components/parameters/CardID"
+    get:
+      tags: [Flashcards]
+      operationId: getFlashcard
+      responses:
+        "200":
+          description: Card detail
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FlashcardResponse" }
+        default: { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [Flashcards]
+      operationId: updateFlashcard
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              properties:
+                front: { type: string, minLength: 1 }
+                back: { type: string, minLength: 1 }
+      responses:
+        "200":
+          description: Card updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FlashcardResponse" }
+        default: { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [Flashcards]
+      operationId: deleteFlashcard
+      responses:
+        "204": { description: Card, card reviews and error links deleted }
+        default: { $ref: "#/components/responses/Error" }
+  /api/v1/flashcards/{cardId}/reviews:
+    parameters:
+      - $ref: "#/components/parameters/CardID"
+    post:
+      tags: [Reviews]
+      operationId: reviewFlashcard
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [rating]
+              properties:
+                rating: { $ref: "#/components/schemas/Rating" }
+      responses:
+        "200":
+          description: SRS updated and review recorded atomically
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FlashcardReviewResponse" }
+        default: { $ref: "#/components/responses/Error" }
+  /api/v1/review-history:
+    get:
+      tags: [Reviews]
+      operationId: listReviewHistory
+      parameters:
+        - { name: from, in: query, schema: { $ref: "#/components/schemas/Timestamp" } }
+        - { name: to, in: query, schema: { $ref: "#/components/schemas/Timestamp" } }
+        - { name: rating, in: query, schema: { $ref: "#/components/schemas/Rating" } }
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Review event list
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReviewHistoryListResponse" }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      tags: [Reviews]
+      operationId: createReviewEvent
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReviewEventInput" }
+      responses:
+        "201":
+          description: Non-flashcard review event recorded
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReviewHistoryResponse" }
+        default: { $ref: "#/components/responses/Error" }
+  /api/v1/quick-quizzes:
+    get:
+      tags: [Quick quizzes]
+      operationId: listQuickQuizzes
+      parameters:
+        - { name: reviewed, in: query, schema: { type: boolean } }
+        - $ref: "#/components/parameters/FolderIDQuery"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Paginated quick quizzes
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QuickQuizListResponse" }
+        default: { $ref: "#/components/responses/Error" }
+  /api/v1/quick-quizzes/bulk:
+    post:
+      tags: [Quick quizzes]
+      operationId: createQuickQuizzes
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [quizzes]
+              properties:
+                quizzes:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items: { $ref: "#/components/schemas/QuickQuizDraft" }
+      responses:
+        "201":
+          description: Quick quizzes created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QuickQuizListResponse" }
+        default: { $ref: "#/components/responses/Error" }
+  /api/v1/quick-quizzes/{quizId}:
+    parameters:
+      - $ref: "#/components/parameters/QuizID"
+    get:
+      tags: [Quick quizzes]
+      operationId: getQuickQuiz
+      responses:
+        "200":
+          description: Quiz detail
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QuickQuizResponse" }
+        default: { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [Quick quizzes]
+      operationId: updateQuickQuiz
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QuickQuizUpdate" }
+      responses:
+        "200":
+          description: Quiz updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QuickQuizResponse" }
+        default: { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [Quick quizzes]
+      operationId: deleteQuickQuiz
+      responses:
+        "204": { description: Quiz deleted }
+        default: { $ref: "#/components/responses/Error" }
+  /api/v1/quick-quizzes/{quizId}/reviews:
+    parameters:
+      - $ref: "#/components/parameters/QuizID"
+    post:
+      tags: [Quick quizzes, Reviews]
+      operationId: reviewQuickQuiz
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                rating: { $ref: "#/components/schemas/Rating" }
+                createFlashcard: { type: boolean, default: false }
+      responses:
+        "200":
+          description: Quiz marked reviewed, with optional review/card result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QuickQuizReviewResponse" }
+        default: { $ref: "#/components/responses/Error" }
+  /api/v1/errors:
+    get:
+      tags: [Errors]
+      operationId: listErrors
+      parameters:
+        - $ref: "#/components/parameters/FolderIDQuery"
+        - { name: hasFlashcard, in: query, schema: { type: boolean } }
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Paginated error book
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorQuestionListResponse" }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      tags: [Errors]
+      operationId: createError
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ErrorQuestionInput" }
+      responses:
+        "201":
+          description: Error question created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorQuestionResponse" }
+        "200":
+          description: Matching error question already existed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorQuestionResponse" }
+        default: { $ref: "#/components/responses/Error" }
+  /api/v1/errors/actions/generate-missing-flashcards:
+    post:
+      tags: [Errors, AI]
+      operationId: generateMissingErrorFlashcards
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                concurrency: { type: integer, minimum: 1, maximum: 3, default: 1 }
+                model: { $ref: "#/components/schemas/AIModel" }
+      responses:
+        "200":
+          description: Per-error generation results
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BatchErrorCardResponse" }
+        default: { $ref: "#/components/responses/Error" }
+  /api/v1/errors/{errorId}:
+    parameters:
+      - $ref: "#/components/parameters/ErrorID"
+    get:
+      tags: [Errors]
+      operationId: getError
+      responses:
+        "200":
+          description: Error question detail
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorQuestionResponse" }
+        default: { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [Errors]
+      operationId: updateError
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ErrorQuestionUpdate" }
+      responses:
+        "200":
+          description: Error question updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorQuestionResponse" }
+        default: { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [Errors]
+      operationId: deleteError
+      responses:
+        "204": { description: Error and links deleted; cards retained }
+        default: { $ref: "#/components/responses/Error" }
+  /api/v1/errors/{errorId}/flashcard:
+    parameters:
+      - $ref: "#/components/parameters/ErrorID"
+    post:
+      tags: [Errors, AI]
+      operationId: createErrorFlashcard
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                model: { $ref: "#/components/schemas/AIModel" }
+      responses:
+        "200":
+          description: New or existing card linked to the error
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AddFlashcardsResponse" }
+        default: { $ref: "#/components/responses/Error" }
+  /api/v1/ai/study-cards:
+    post:
+      tags: [AI]
+      operationId: generateStudyCards
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StudyCardsRequest" }
+      responses:
+        "200":
+          description: Generated drafts, not persisted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StudyCardsResponse" }
+        default: { $ref: "#/components/responses/Error" }
+  /api/v1/ai/simulated-questions:
+    post:
+      tags: [AI]
+      operationId: generateSimulatedQuestions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QuestionGenerationRequest" }
+      responses:
+        "200":
+          description: Generated questions, not persisted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GeneratedQuestionsResponse" }
+        default: { $ref: "#/components/responses/Error" }
+  /api/v1/ai/exams:
+    post:
+      tags: [AI]
+      operationId: generateExam
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QuestionGenerationRequest" }
+      responses:
+        "200":
+          description: Generated ephemeral exam questions
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GeneratedQuestionsResponse" }
+        default: { $ref: "#/components/responses/Error" }
+  /api/v1/ai/errors/analyze:
+    post:
+      tags: [AI]
+      operationId: analyzeError
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [question, wrongAnswer]
+              properties:
+                question: { type: string, minLength: 1 }
+                wrongAnswer: { type: string, minLength: 1 }
+                model: { $ref: "#/components/schemas/AIModel" }
+      responses:
+        "200":
+          description: Human-readable analysis
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    required: [data]
+                    properties:
+                      data:
+                        type: object
+                        required: [analysis]
+                        properties:
+                          analysis: { type: string }
+        default: { $ref: "#/components/responses/Error" }
+  /api/v1/ai/question-card:
+    post:
+      tags: [AI, Flashcards]
+      operationId: generateQuestionCard
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QuestionCardRequest" }
+      responses:
+        "200":
+          description: Generated card persisted or deduplicated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AddFlashcardsResponse" }
+        default: { $ref: "#/components/responses/Error" }
+  /api/v1/ai/weak-points:
+    post:
+      tags: [AI]
+      operationId: analyzeWeakPoints
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                cardIds:
+                  type: array
+                  maxItems: 100
+                  items: { $ref: "#/components/schemas/UUID" }
+                model: { $ref: "#/components/schemas/AIModel" }
+      responses:
+        "200":
+          description: Grouped weak points
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WeakPointsResponse" }
+        default: { $ref: "#/components/responses/Error" }
+  /api/v1/ai/reinforcement-exercises:
+    post:
+      tags: [AI]
+      operationId: generateReinforcementExercises
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReinforcementRequest" }
+      responses:
+        "200":
+          description: Generated exercises, not persisted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GeneratedQuestionsResponse" }
+        default: { $ref: "#/components/responses/Error" }
+  /api/v1/dashboard:
+    get:
+      tags: [Dashboard]
+      operationId: getDashboard
+      parameters:
+        - { name: days, in: query, schema: { type: integer, minimum: 1, maximum: 90, default: 7 } }
+        - { name: timezone, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Learning summary and trend
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DashboardResponse" }
+        default: { $ref: "#/components/responses/Error" }
+  /api/v1/backups/export:
+    get:
+      tags: [Backups]
+      operationId: exportBackup
+      responses:
+        "200":
+          description: Complete medstudy-backup JSON attachment
+          headers:
+            Content-Disposition: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DatabaseSnapshot" }
+        default: { $ref: "#/components/responses/Error" }
+  /api/v1/backups/import/preview:
+    post:
+      tags: [Backups]
+      operationId: previewBackupImport
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DatabaseSnapshot" }
+      responses:
+        "200":
+          description: Validated preview and one-time token
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImportPreviewResponse" }
+        default: { $ref: "#/components/responses/Error" }
+  /api/v1/backups/import:
+    post:
+      tags: [Backups]
+      operationId: importBackup
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [importToken]
+              properties:
+                importToken: { type: string, minLength: 16 }
+      responses:
+        "200":
+          description: Current data backed up and snapshot restored
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RestoreResponse" }
+        default: { $ref: "#/components/responses/Error" }
+  /api/v1/backups/safety:
+    get:
+      tags: [Backups]
+      operationId: listSafetyBackups
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Safety backup list
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SafetyBackupListResponse" }
+        default: { $ref: "#/components/responses/Error" }
+  /api/v1/backups/safety/{backupId}:
+    parameters:
+      - $ref: "#/components/parameters/BackupID"
+    get:
+      tags: [Backups]
+      operationId: getSafetyBackup
+      responses:
+        "200":
+          description: Safety backup metadata and summary
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SafetyBackupResponse" }
+        default: { $ref: "#/components/responses/Error" }
+  /api/v1/backups/safety/{backupId}/download:
+    parameters:
+      - $ref: "#/components/parameters/BackupID"
+    get:
+      tags: [Backups]
+      operationId: downloadSafetyBackup
+      responses:
+        "200":
+          description: Complete safety snapshot attachment
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DatabaseSnapshot" }
+        default: { $ref: "#/components/responses/Error" }
+  /api/v1/backups/safety/{backupId}/restore:
+    parameters:
+      - $ref: "#/components/parameters/BackupID"
+    post:
+      tags: [Backups]
+      operationId: restoreSafetyBackup
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Current data backed up and selected safety backup restored
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RestoreResponse" }
+        default: { $ref: "#/components/responses/Error" }
+  /api/v1/migrations/legacy/preview:
+    post:
+      tags: [Migration]
+      operationId: previewLegacyMigration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LegacyPayload" }
+      responses:
+        "200":
+          description: Legacy data validation report and one-time token
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MigrationPreviewResponse" }
+        default: { $ref: "#/components/responses/Error" }
+  /api/v1/migrations/legacy/import:
+    post:
+      tags: [Migration]
+      operationId: importLegacyData
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [migrationToken, mode]
+              properties:
+                migrationToken: { type: string, minLength: 16 }
+                mode: { type: string, const: replace }
+      responses:
+        "200":
+          description: Current data backed up and legacy data imported
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RestoreResponse" }
+        default: { $ref: "#/components/responses/Error" }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque-access-token
+    refreshCookie:
+      type: apiKey
+      in: cookie
+      name: medstudy_refresh
+  parameters:
+    Cursor:
+      name: cursor
+      in: query
+      schema: { type: string }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+    FolderType:
+      name: type
+      in: query
+      schema: { $ref: "#/components/schemas/FolderType" }
+    FolderIDQuery:
+      name: folderId
+      in: query
+      schema: { $ref: "#/components/schemas/UUID" }
+    FolderID:
+      name: folderId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/UUID" }
+    DocumentID:
+      name: documentId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/UUID" }
+    CardID:
+      name: cardId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/UUID" }
+    QuizID:
+      name: quizId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/UUID" }
+    ErrorID:
+      name: errorId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/UUID" }
+    BackupID:
+      name: backupId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/UUID" }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 8, maxLength: 128 }
+  responses:
+    Error:
+      description: Error response
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    Unauthorized:
+      description: Authentication required or invalid
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    NotFound:
+      description: Resource not found in the current user scope
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    Conflict:
+      description: Resource or state conflict
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    PayloadTooLarge:
+      description: Request exceeds configured size limit
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    UnsupportedMediaType:
+      description: Unsupported content or document type
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    TooManyRequests:
+      description: Rate limit exceeded
+      headers:
+        Retry-After: { schema: { type: integer } }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    ServiceUnavailable:
+      description: Required dependency is not ready
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+  schemas:
+    UUID:
+      type: string
+      format: uuid
+    Timestamp:
+      type: integer
+      format: int64
+      minimum: 0
+      example: 1787712000000
+    FolderType:
+      type: string
+      enum: [material, exam]
+    Rating:
+      type: string
+      enum: [forgot, hard, good]
+    OriginType:
+      type: string
+      enum: [quick-quiz, error, exam, reinforcement]
+    AIModel:
+      type: string
+      enum: [deepseek-chat, deepseek-reasoner]
+      default: deepseek-chat
+    Health:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: { type: string, const: ok }
+    Meta:
+      type: object
+      required: [requestId]
+      properties:
+        requestId: { type: string }
+        nextCursor: { type: [string, "null"] }
+        hasMore: { type: boolean }
+    Envelope:
+      type: object
+      required: [meta]
+      properties:
+        meta: { $ref: "#/components/schemas/Meta" }
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error, meta]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, retryable]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            fields:
+              type: object
+              additionalProperties: { type: string }
+            retryable: { type: boolean }
+        meta: { $ref: "#/components/schemas/Meta" }
+    VersionResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              required: [version, apiVersion]
+              properties:
+                version: { type: string }
+                apiVersion: { type: string, const: v1 }
+                commit: { type: string }
+                builtAt: { type: string, format: date-time }
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      properties:
+        username: { type: string, minLength: 3, maxLength: 32 }
+        password: { type: string, minLength: 12, maxLength: 128, writeOnly: true }
+        timezone: { type: string, default: Asia/Shanghai }
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      properties:
+        username: { type: string }
+        password: { type: string, writeOnly: true }
+    User:
+      type: object
+      required: [id, username, timezone, aiCredential, createdAt]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        username: { type: string }
+        timezone: { type: string }
+        aiCredential: { $ref: "#/components/schemas/AICredentialStatus" }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+    AICredentialStatus:
+      type: object
+      required: [configured, source]
+      properties:
+        configured: { type: boolean }
+        source: { type: string, enum: [none, server, personal] }
+        last4: { type: [string, "null"] }
+    AICredentialResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          required: [data]
+          properties:
+            data: { $ref: "#/components/schemas/AICredentialStatus" }
+    UserResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          required: [data]
+          properties:
+            data: { $ref: "#/components/schemas/User" }
+    AuthResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              required: [user, accessToken, expiresIn]
+              properties:
+                user: { $ref: "#/components/schemas/User" }
+                accessToken: { type: string, writeOnly: true }
+                expiresIn: { type: integer, description: Seconds }
+    Folder:
+      type: object
+      additionalProperties: false
+      required: [id, name, type, createdAt]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        name: { type: string }
+        type: { $ref: "#/components/schemas/FolderType" }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+    FolderInput:
+      type: object
+      additionalProperties: false
+      required: [name, type]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 100 }
+        type: { $ref: "#/components/schemas/FolderType" }
+    FolderResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          required: [data]
+          properties:
+            data: { $ref: "#/components/schemas/Folder" }
+    FolderListResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: array
+              items: { $ref: "#/components/schemas/Folder" }
+    Document:
+      type: object
+      additionalProperties: false
+      required: [id, name, folderId, characterCount, createdAt]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        name: { type: string }
+        folderId: { oneOf: [{ $ref: "#/components/schemas/UUID" }, { type: "null" }] }
+        content: { type: string }
+        characterCount: { type: integer, minimum: 0 }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+    DocumentInput:
+      type: object
+      additionalProperties: false
+      required: [folderId, name, content]
+      properties:
+        folderId: { $ref: "#/components/schemas/UUID" }
+        name: { type: string, minLength: 1, maxLength: 255 }
+        content: { type: string, minLength: 10 }
+    DocumentResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          required: [data]
+          properties:
+            data: { $ref: "#/components/schemas/Document" }
+    DocumentListResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: array
+              items: { $ref: "#/components/schemas/Document" }
+    DocumentImportResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              required: [imported, failed]
+              properties:
+                imported:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      clientFilename: { type: string }
+                      document: { $ref: "#/components/schemas/Document" }
+                failed:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      clientFilename: { type: string }
+                      code: { type: string }
+                      message: { type: string }
+    SourceFields:
+      type: object
+      properties:
+        sourceDocId: { oneOf: [{ $ref: "#/components/schemas/UUID" }, { type: "null" }] }
+        sourceDocName: { type: [string, "null"] }
+        sourceFolderId: { oneOf: [{ $ref: "#/components/schemas/UUID" }, { type: "null" }] }
+        sourceFolderName: { type: [string, "null"] }
+    FlashcardDraft:
+      allOf:
+        - $ref: "#/components/schemas/SourceFields"
+        - type: object
+          required: [front, back]
+          properties:
+            front: { type: string, minLength: 1 }
+            back: { type: string, minLength: 1 }
+            originType: { oneOf: [{ $ref: "#/components/schemas/OriginType" }, { type: "null" }] }
+            originId: { type: [string, "null"] }
+            sourceText: { type: [string, "null"] }
+    Flashcard:
+      allOf:
+        - $ref: "#/components/schemas/FlashcardDraft"
+        - type: object
+          required: [id, nextReviewDate, interval, easeFactor, repetitions, createdAt]
+          properties:
+            id: { $ref: "#/components/schemas/UUID" }
+            nextReviewDate: { $ref: "#/components/schemas/Timestamp" }
+            interval: { type: integer, minimum: 0 }
+            easeFactor: { type: number, minimum: 1.3 }
+            repetitions: { type: integer, minimum: 0 }
+            createdAt: { $ref: "#/components/schemas/Timestamp" }
+    FlashcardResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          required: [data]
+          properties:
+            data: { $ref: "#/components/schemas/Flashcard" }
+    FlashcardListResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: array
+              items: { $ref: "#/components/schemas/Flashcard" }
+    AddFlashcardsResult:
+      type: object
+      required: [requestedCount, addedCards, duplicateCards]
+      properties:
+        requestedCount: { type: integer, minimum: 0 }
+        addedCards:
+          type: array
+          items: { $ref: "#/components/schemas/Flashcard" }
+        duplicateCards:
+          type: array
+          items: { $ref: "#/components/schemas/Flashcard" }
+    AddFlashcardsResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          required: [data]
+          properties:
+            data: { $ref: "#/components/schemas/AddFlashcardsResult" }
+    ReviewHistory:
+      type: object
+      required: [id, cardId, rating, timestamp]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        cardId: { type: string }
+        subjectType: { type: string, enum: [flashcard, quickQuiz, examQuestion, reinforcement] }
+        rating: { $ref: "#/components/schemas/Rating" }
+        timestamp: { $ref: "#/components/schemas/Timestamp" }
+    ReviewEventInput:
+      type: object
+      additionalProperties: false
+      required: [cardId, subjectType, rating]
+      properties:
+        cardId: { type: string, minLength: 1 }
+        subjectType: { type: string, enum: [quickQuiz, examQuestion, reinforcement] }
+        rating: { $ref: "#/components/schemas/Rating" }
+        timestamp: { $ref: "#/components/schemas/Timestamp" }
+    ReviewHistoryResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          required: [data]
+          properties:
+            data: { $ref: "#/components/schemas/ReviewHistory" }
+    ReviewHistoryListResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: array
+              items: { $ref: "#/components/schemas/ReviewHistory" }
+    FlashcardReviewResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              required: [card, review]
+              properties:
+                card: { $ref: "#/components/schemas/Flashcard" }
+                review: { $ref: "#/components/schemas/ReviewHistory" }
+    Options:
+      type: object
+      additionalProperties: { type: string }
+    QuestionBase:
+      allOf:
+        - $ref: "#/components/schemas/SourceFields"
+        - type: object
+          required: [type, question, answer, analysis]
+          properties:
+            type: { type: string, minLength: 1 }
+            question: { type: string, minLength: 1 }
+            options: { oneOf: [{ $ref: "#/components/schemas/Options" }, { type: "null" }] }
+            answer: { type: string, minLength: 1 }
+            analysis: { type: string }
+    QuickQuizDraft:
+      allOf:
+        - $ref: "#/components/schemas/QuestionBase"
+    QuickQuiz:
+      allOf:
+        - $ref: "#/components/schemas/QuestionBase"
+        - type: object
+          required: [id, reviewed, createdAt]
+          properties:
+            id: { $ref: "#/components/schemas/UUID" }
+            reviewed: { type: boolean }
+            createdAt: { $ref: "#/components/schemas/Timestamp" }
+    QuickQuizUpdate:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        question: { type: string, minLength: 1 }
+        options: { oneOf: [{ $ref: "#/components/schemas/Options" }, { type: "null" }] }
+        answer: { type: string, minLength: 1 }
+        analysis: { type: string }
+    QuickQuizResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          required: [data]
+          properties:
+            data: { $ref: "#/components/schemas/QuickQuiz" }
+    QuickQuizListResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: array
+              items: { $ref: "#/components/schemas/QuickQuiz" }
+    QuickQuizReviewResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              required: [quiz, reviewSaved]
+              properties:
+                quiz: { $ref: "#/components/schemas/QuickQuiz" }
+                reviewSaved: { type: boolean }
+                review: { oneOf: [{ $ref: "#/components/schemas/ReviewHistory" }, { type: "null" }] }
+                flashcardResult: { oneOf: [{ $ref: "#/components/schemas/AddFlashcardsResult" }, { type: "null" }] }
+                flashcardError: { oneOf: [{ $ref: "#/components/schemas/ErrorResponse" }, { type: "null" }] }
+    ErrorQuestionInput:
+      allOf:
+        - $ref: "#/components/schemas/SourceFields"
+        - type: object
+          required: [question, wrongAnswer, analysis]
+          properties:
+            question: { type: string, minLength: 1 }
+            options: { oneOf: [{ $ref: "#/components/schemas/Options" }, { type: "null" }] }
+            wrongAnswer: { type: string, minLength: 1 }
+            correctAnswer: { type: [string, "null"] }
+            analysis: { type: string }
+    ErrorQuestion:
+      allOf:
+        - $ref: "#/components/schemas/ErrorQuestionInput"
+        - type: object
+          required: [id, derivedFlashcardIds, createdAt]
+          properties:
+            id: { $ref: "#/components/schemas/UUID" }
+            derivedFlashcardIds:
+              type: array
+              items: { $ref: "#/components/schemas/UUID" }
+            createdAt: { $ref: "#/components/schemas/Timestamp" }
+    ErrorQuestionUpdate:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        question: { type: string, minLength: 1 }
+        options: { oneOf: [{ $ref: "#/components/schemas/Options" }, { type: "null" }] }
+        wrongAnswer: { type: string, minLength: 1 }
+        correctAnswer: { type: [string, "null"] }
+        analysis: { type: string }
+    ErrorQuestionResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          required: [data]
+          properties:
+            data: { $ref: "#/components/schemas/ErrorQuestion" }
+    ErrorQuestionListResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: array
+              items: { $ref: "#/components/schemas/ErrorQuestion" }
+    BatchErrorCardResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              required: [results]
+              properties:
+                results:
+                  type: array
+                  items:
+                    type: object
+                    required: [errorId, status]
+                    properties:
+                      errorId: { $ref: "#/components/schemas/UUID" }
+                      status: { type: string, enum: [created, linkedExisting, failed] }
+                      cardId: { oneOf: [{ $ref: "#/components/schemas/UUID" }, { type: "null" }] }
+                      errorCode: { type: [string, "null"] }
+    StudyCardsRequest:
+      type: object
+      additionalProperties: false
+      required: [documentIds, questionCount]
+      properties:
+        documentIds:
+          type: array
+          minItems: 1
+          maxItems: 20
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/UUID" }
+        questionCount: { type: integer, minimum: 1, maximum: 100 }
+        scope: { type: string, maxLength: 1000 }
+        model: { $ref: "#/components/schemas/AIModel" }
+    StudyCardsResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              required: [cards, sourceFolderName]
+              properties:
+                cards:
+                  type: array
+                  items:
+                    type: object
+                    required: [front, back]
+                    properties:
+                      front: { type: string }
+                      back: { type: string }
+                sourceFolderId: { oneOf: [{ $ref: "#/components/schemas/UUID" }, { type: "null" }] }
+                sourceFolderName: { type: string }
+    QuestionGenerationRequest:
+      type: object
+      additionalProperties: false
+      required: [materialDocumentIds, types, questionCount]
+      properties:
+        materialDocumentIds:
+          type: array
+          minItems: 1
+          maxItems: 20
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/UUID" }
+        examDocumentIds:
+          type: array
+          maxItems: 20
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/UUID" }
+        types:
+          type: array
+          minItems: 1
+          maxItems: 10
+          uniqueItems: true
+          items: { type: string, minLength: 1 }
+        questionCount: { type: integer, minimum: 1, maximum: 100 }
+        scope: { type: string, maxLength: 1000 }
+        model: { $ref: "#/components/schemas/AIModel" }
+    ExamQuestion:
+      allOf:
+        - $ref: "#/components/schemas/QuestionBase"
+        - type: object
+          required: [id]
+          properties:
+            id: { $ref: "#/components/schemas/UUID" }
+    GeneratedQuestionsResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              required: [questions]
+              properties:
+                questions:
+                  type: array
+                  items: { $ref: "#/components/schemas/ExamQuestion" }
+                sourceFolderId: { oneOf: [{ $ref: "#/components/schemas/UUID" }, { type: "null" }] }
+                sourceFolderName: { type: string }
+    QuestionCardRequest:
+      allOf:
+        - $ref: "#/components/schemas/SourceFields"
+        - type: object
+          required: [originType, originId, question, answer]
+          properties:
+            originType: { type: string, enum: [exam, reinforcement] }
+            originId: { type: string, minLength: 1 }
+            question: { type: string, minLength: 1 }
+            options: { oneOf: [{ $ref: "#/components/schemas/Options" }, { type: "null" }] }
+            answer: { type: string, minLength: 1 }
+            analysis: { type: string }
+            model: { $ref: "#/components/schemas/AIModel" }
+    WeakPoint:
+      type: object
+      required: [id, point, count, cardIds]
+      properties:
+        id: { type: string }
+        point: { type: string }
+        count: { type: integer, minimum: 1 }
+        cardIds:
+          type: array
+          items: { $ref: "#/components/schemas/UUID" }
+    WeakPointsResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              required: [points]
+              properties:
+                points:
+                  type: array
+                  items: { $ref: "#/components/schemas/WeakPoint" }
+    ReinforcementRequest:
+      type: object
+      additionalProperties: false
+      required: [points]
+      properties:
+        points:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items:
+            type: object
+            required: [point, cardIds]
+            properties:
+              point: { type: string, minLength: 1 }
+              cardIds:
+                type: array
+                minItems: 1
+                items: { $ref: "#/components/schemas/UUID" }
+        count: { type: integer, minimum: 1, maximum: 10, default: 5 }
+        model: { $ref: "#/components/schemas/AIModel" }
+    TrendPoint:
+      type: object
+      required: [date, forgot, hard, good, total]
+      properties:
+        date: { type: string, pattern: "^[0-9]{2}/[0-9]{2}$" }
+        forgot: { type: integer, minimum: 0 }
+        hard: { type: integer, minimum: 0 }
+        good: { type: integer, minimum: 0 }
+        total: { type: integer, minimum: 0 }
+    DashboardResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              required: [summary, trend, weakCardIds]
+              properties:
+                summary:
+                  type: object
+                  required: [totalCards, masteredCards, todayReviews, errorCount]
+                  properties:
+                    totalCards: { type: integer, minimum: 0 }
+                    masteredCards: { type: integer, minimum: 0 }
+                    todayReviews: { type: integer, minimum: 0 }
+                    errorCount: { type: integer, minimum: 0 }
+                trend:
+                  type: array
+                  items: { $ref: "#/components/schemas/TrendPoint" }
+                weakCardIds:
+                  type: array
+                  items: { $ref: "#/components/schemas/UUID" }
+    Database:
+      type: object
+      additionalProperties: false
+      required: [folders, documents, flashcards, reviewHistory, errors, quickQuizzes]
+      properties:
+        folders:
+          type: array
+          items: { $ref: "#/components/schemas/Folder" }
+        documents:
+          type: array
+          items: { $ref: "#/components/schemas/Document" }
+        flashcards:
+          type: array
+          items: { $ref: "#/components/schemas/Flashcard" }
+        reviewHistory:
+          type: array
+          items: { $ref: "#/components/schemas/ReviewHistory" }
+        errors:
+          type: array
+          items: { $ref: "#/components/schemas/ErrorQuestion" }
+        quickQuizzes:
+          type: array
+          items: { $ref: "#/components/schemas/QuickQuiz" }
+    DatabaseSnapshot:
+      type: object
+      additionalProperties: false
+      required: [format, schemaVersion, revision, exportedAt, username, data]
+      properties:
+        format: { type: string, const: medstudy-backup }
+        schemaVersion: { type: integer, minimum: 1 }
+        revision: { type: integer, minimum: 0 }
+        exportedAt: { $ref: "#/components/schemas/Timestamp" }
+        username: { type: string }
+        data: { $ref: "#/components/schemas/BackupDatabase" }
+    BackupFolder:
+      type: object
+      additionalProperties: false
+      required: [id, name, createdAt]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        name: { type: string }
+        type: { $ref: "#/components/schemas/FolderType" }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+    BackupDocument:
+      type: object
+      additionalProperties: false
+      required: [id, name, folderId, content, createdAt]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        name: { type: string }
+        folderId: { oneOf: [{ $ref: "#/components/schemas/UUID" }, { type: "null" }] }
+        content: { type: string }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+    BackupQuickQuiz:
+      allOf:
+        - $ref: "#/components/schemas/QuestionBase"
+        - type: object
+          required: [id, createdAt]
+          properties:
+            id: { $ref: "#/components/schemas/UUID" }
+            reviewed:
+              type: boolean
+              default: false
+              description: Missing legacy values are normalized to false.
+            createdAt: { $ref: "#/components/schemas/Timestamp" }
+    BackupDatabase:
+      type: object
+      additionalProperties: false
+      required: [folders, documents, flashcards, reviewHistory, errors]
+      properties:
+        folders:
+          type: array
+          items: { $ref: "#/components/schemas/BackupFolder" }
+        documents:
+          type: array
+          items: { $ref: "#/components/schemas/BackupDocument" }
+        flashcards:
+          type: array
+          items: { $ref: "#/components/schemas/Flashcard" }
+        reviewHistory:
+          type: array
+          items: { $ref: "#/components/schemas/ReviewHistory" }
+        errors:
+          type: array
+          items: { $ref: "#/components/schemas/ErrorQuestion" }
+        quickQuizzes:
+          type: array
+          default: []
+          items: { $ref: "#/components/schemas/BackupQuickQuiz" }
+    LegacyPayload:
+      type: object
+      additionalProperties: true
+      description: >-
+        A wrapped legacy DatabaseSnapshot or an unwrapped legacy Database. This
+        input is deliberately broad because preview performs detailed validation
+        and reports missing legacy fields such as folder.type, quickQuizzes, and
+        quickQuiz.reviewed before any data is written.
+    BootstrapResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              allOf:
+                - $ref: "#/components/schemas/Database"
+                - type: object
+                  required: [revision]
+                  properties:
+                    revision: { type: integer, minimum: 0 }
+    BackupSummary:
+      type: object
+      required: [folders, documents, documentCharacters, flashcards, reviewHistory, errors, quickQuizzes]
+      properties:
+        folders: { type: integer, minimum: 0 }
+        documents: { type: integer, minimum: 0 }
+        documentCharacters: { type: integer, minimum: 0 }
+        flashcards: { type: integer, minimum: 0 }
+        reviewHistory: { type: integer, minimum: 0 }
+        errors: { type: integer, minimum: 0 }
+        quickQuizzes: { type: integer, minimum: 0 }
+    ImportPreviewResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              required: [importToken, expiresAt, summary, warnings]
+              properties:
+                importToken: { type: string, writeOnly: true }
+                expiresAt: { $ref: "#/components/schemas/Timestamp" }
+                summary: { $ref: "#/components/schemas/BackupSummary" }
+                warnings:
+                  type: array
+                  items: { type: string }
+    RestoreResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              required: [revision, summary, safetyBackupId]
+              properties:
+                revision: { type: integer, minimum: 0 }
+                summary: { $ref: "#/components/schemas/BackupSummary" }
+                safetyBackupId: { $ref: "#/components/schemas/UUID" }
+    SafetyBackup:
+      type: object
+      required: [id, source, reason, createdAt, summary]
+      properties:
+        id: { $ref: "#/components/schemas/UUID" }
+        source: { type: string, enum: [local, cloud, server] }
+        reason: { type: string, enum: [conflict, before-restore] }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        size: { type: integer, minimum: 0 }
+        summary: { $ref: "#/components/schemas/BackupSummary" }
+    SafetyBackupResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          required: [data]
+          properties:
+            data: { $ref: "#/components/schemas/SafetyBackup" }
+    SafetyBackupListResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: array
+              items: { $ref: "#/components/schemas/SafetyBackup" }
+    MigrationPreviewResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              required: [migrationToken, expiresAt, summary, warnings, errors]
+              properties:
+                migrationToken: { type: string, writeOnly: true }
+                expiresAt: { $ref: "#/components/schemas/Timestamp" }
+                summary: { $ref: "#/components/schemas/BackupSummary" }
+                warnings:
+                  type: array
+                  items: { type: string }
+                errors:
+                  type: array
+                  items: { type: string }
