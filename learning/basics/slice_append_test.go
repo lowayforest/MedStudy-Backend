@@ -3,6 +3,7 @@ package basics
 import "testing"
 
 // TestPracticeAppend 练习使用 append 向切片追加元素。
+// 从两个学生开始，追加王五后断言长度为 3，且第三个学生的姓名和年龄正确。
 // 运行：go test -v ./learning/basics -run '^TestPracticeAppend$'
 func TestPracticeAppend(t *testing.T) {
 

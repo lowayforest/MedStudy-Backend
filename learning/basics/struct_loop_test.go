@@ -3,6 +3,7 @@ package basics
 import "testing"
 
 // TestPractice 是结构体、切片和循环的学习练习。
+// 两种循环应输出相同的学生列表；这里只通过日志观察，没有自动断言，不算业务验收。
 // 运行：go test -v ./learning/basics -run '^TestPractice$'
 func TestPractice(t *testing.T) {
 

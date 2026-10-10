@@ -3,6 +3,7 @@ package basics
 import "testing"
 
 // TestPracticeRangeUpdate 练习通过循环修改切片中的结构体。
+// 从年龄 18、20 开始，循环加一后断言原切片中的年龄变为 19、21。
 // 学习重点：range 取出的结构体值是副本；通过索引修改切片中的元素。
 // 运行：go test -v ./learning/basics -run '^TestPracticeRangeUpdate$'
 func TestPracticeRangeUpdate(t *testing.T) {

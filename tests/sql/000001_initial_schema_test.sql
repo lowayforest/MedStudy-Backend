@@ -2,6 +2,8 @@
 -- 测试数据在事务末尾回滚，不要在 Navicat 中导入此测试文件。
 BEGIN;
 
+-- 失败场景助手：执行语句，检查它确实失败且错误代码符合预期；意外成功也算失败。
+-- 23505 表示唯一约束冲突，23503 表示外键约束冲突，23514 表示检查约束不满足。
 CREATE FUNCTION pg_temp.expect_sqlstate(statement text, expected_state text)
 RETURNS void LANGUAGE plpgsql AS $function$
 DECLARE
@@ -37,11 +39,13 @@ DECLARE
     foreign_session_id uuid;
     count_value integer;
 BEGIN
+    -- 结构验收：应有 14 张表，并记录初始迁移版本 1。
     SELECT count(*) INTO count_value FROM pg_tables WHERE schemaname = 'public';
     IF count_value <> 14 THEN RAISE EXCEPTION '期望 14 张表，实际 %', count_value; END IF;
     IF NOT EXISTS (SELECT 1 FROM public.schema_migrations WHERE version = 1 AND name = 'initial_schema') THEN
         RAISE EXCEPTION '缺少迁移版本记录';
     END IF;
+    -- 文本规则：全角英文、大小写和不同空白应统一；不同 front/back 组合不能因拼接产生同一哈希。
     IF public.medstudy_normalize_text(U&'\3000\FF25\FF23\FF27\0009  检查\000A') <> 'ecg 检查' THEN
         RAISE EXCEPTION 'NFKC/大小写/Unicode 空白规范化错误';
     END IF;
@@ -49,6 +53,7 @@ BEGIN
         RAISE EXCEPTION 'front/back 哈希拼接有歧义';
     END IF;
 
+    -- 用户规则：大小写/全角变体不能重复注册；明文密码与过短用户名应被拒绝。
     -- 这些是测试占位哈希，不是实际可登录账号；全部会回滚。
     INSERT INTO public.users(username, password_hash) VALUES ('TestUser', '$argon2id$test-only-placeholder') RETURNING id INTO owner_id;
     INSERT INTO public.users(username, password_hash) VALUES ('OtherUser', '$argon2id$test-only-placeholder') RETURNING id INTO other_id;
@@ -57,6 +62,7 @@ BEGIN
     PERFORM pg_temp.expect_sqlstate('INSERT INTO public.users(username, password_hash) VALUES (''abc'', ''plaintext'')', '23514');
     PERFORM pg_temp.expect_sqlstate('INSERT INTO public.users(username, password_hash) VALUES (''ab'', ''$argon2id$test'')', '23514');
 
+    -- 资料夹规则：允许两种类型及 100 个汉字；拒绝 101 字、未知类型、纯空白及未去除的前置空白。
     INSERT INTO public.folders(user_id, name, type) VALUES (owner_id, '生理学', 'material') RETURNING id INTO folder_id;
     INSERT INTO public.folders(user_id, name, type) VALUES (owner_id, '生理学', 'exam') RETURNING id INTO second_folder_id;
     INSERT INTO public.folders(user_id, name, type) VALUES (other_id, '其他用户资料', 'material') RETURNING id INTO foreign_folder_id;
@@ -66,6 +72,7 @@ BEGIN
     PERFORM pg_temp.expect_sqlstate(format('INSERT INTO public.folders(user_id,name,type) VALUES (%L,E'' \t\n '',''material'')', owner_id), '23514');
     PERFORM pg_temp.expect_sqlstate(format('INSERT INTO public.folders(user_id,name,type) VALUES (%L,E''\t资料'',''material'')', owner_id), '23514');
 
+    -- 文档规则：字符数按汉字数量计算；允许无资料夹的历史文档，拒绝跨用户资料夹和不足十字的正文。
     INSERT INTO public.documents(user_id, folder_id, name, content)
         VALUES (owner_id, folder_id, '循环系统.txt', repeat('医', 10)) RETURNING id INTO document_id;
     INSERT INTO public.documents(user_id, folder_id, name, content)
@@ -77,6 +84,8 @@ BEGIN
     PERFORM pg_temp.expect_sqlstate(format('INSERT INTO public.documents(user_id,folder_id,name,content) VALUES (%L,%L,''x.txt'',repeat(''医'',10))', owner_id, foreign_folder_id), '23503');
     PERFORM pg_temp.expect_sqlstate(format('INSERT INTO public.documents(user_id,name,content) VALUES (%L,''x.txt'',''不足十字'')', owner_id), '23514');
 
+    -- 卡片规则：合法来源应绑定存活外键；跨用户来源、过小或 NaN 的难度系数应被拒绝。
+    -- 相同内容允许属于不同用户；同一用户的来源和内容去重分别受到保护。
     INSERT INTO public.flashcards(user_id, front, back, origin_type, origin_id, source_doc_id, source_doc_name, source_folder_id, source_folder_name)
         VALUES (owner_id, ' ECG 检查 ', '心电图', 'exam', 'origin-one', document_id, '循环系统.txt', folder_id, '生理学') RETURNING id INTO card_id;
     IF NOT EXISTS (SELECT 1 FROM public.flashcards WHERE id = card_id AND source_doc_ref_id = document_id AND source_folder_ref_id = folder_id) THEN
@@ -94,12 +103,15 @@ BEGIN
     -- 长正文进入哈希索引，不能遇到 B-tree 单条索引键大小限制。
     INSERT INTO public.flashcards(user_id, front, back) VALUES (owner_id, repeat('长题', 10000), repeat('长答', 10000));
 
+    -- 快刷题规则：选项应为字符串值组成的 JSON 对象；数组、数字选项值和跨用户来源应被拒绝。
     INSERT INTO public.quick_quizzes(user_id, type, question, options, answer, source_folder_id, source_folder_name)
         VALUES (owner_id, '选择题', '测试题干', '{"A":"选项一","B":"选项二"}', 'A', folder_id, '生理学') RETURNING id INTO quiz_id;
     PERFORM pg_temp.expect_sqlstate(format('INSERT INTO public.quick_quizzes(user_id,type,question,options,answer) VALUES (%L,''选择题'',''题干'',''[]'',''A'')', owner_id), '23514');
     PERFORM pg_temp.expect_sqlstate(format('INSERT INTO public.quick_quizzes(user_id,type,question,options,answer) VALUES (%L,''选择题'',''题干'',''{"A":123}'',''A'')', owner_id), '23514');
     PERFORM pg_temp.expect_sqlstate(format('INSERT INTO public.quick_quizzes(user_id,type,question,answer,source_doc_id) VALUES (%L,''简答题'',''题干'',''答案'',%L)', owner_id, foreign_document_id), '23503');
 
+    -- 错题规则：同用户、同来源、相同规范化题干不能重复，无来源时也要去重；不同来源允许并存。
+    -- 错题来源和错题-卡片关联都不能跨用户。
     INSERT INTO public.error_questions(user_id, question, wrong_answer, source_folder_id, source_folder_name)
         VALUES (owner_id, '错题题干', 'B', folder_id, '生理学') RETURNING id INTO error_id;
     INSERT INTO public.error_questions(user_id, question, wrong_answer, source_folder_id) VALUES (owner_id, '错题题干', 'B', second_folder_id);
@@ -110,28 +122,34 @@ BEGIN
     INSERT INTO public.error_flashcards(user_id, error_id, flashcard_id) VALUES (owner_id, error_id, card_id);
     PERFORM pg_temp.expect_sqlstate(format('INSERT INTO public.error_flashcards(user_id,error_id,flashcard_id) VALUES (%L,%L,%L)', owner_id, error_id, other_card_id), '23503');
 
+    -- 复习记录：持久卡片须属于当前用户，临时考试题允许独立 ID；非法评分应被拒绝。
     INSERT INTO public.review_history(user_id, subject_id, subject_type, rating) VALUES (owner_id, card_id, 'flashcard', 'good');
     INSERT INTO public.review_history(user_id, subject_id, subject_type, rating) VALUES (owner_id, gen_random_uuid(), 'examQuestion', 'hard');
     PERFORM pg_temp.expect_sqlstate(format('INSERT INTO public.review_history(user_id,subject_id,subject_type,rating) VALUES (%L,%L,''flashcard'',''good'')', owner_id, other_card_id), '23503');
     PERFORM pg_temp.expect_sqlstate(format('INSERT INTO public.review_history(user_id,subject_id,subject_type,rating) VALUES (%L,%L,''flashcard'',''bad'')', owner_id, card_id), '23514');
 
+    -- 会话规则：token 哈希不能重复，旧会话不能指向其他用户的新会话。
     INSERT INTO public.sessions(user_id, token_hash, expires_at) VALUES (owner_id, sha256('token-one'::bytea), CURRENT_TIMESTAMP + INTERVAL '1 day') RETURNING id INTO session_id;
     INSERT INTO public.sessions(user_id, token_hash, expires_at) VALUES (other_id, sha256('token-two'::bytea), CURRENT_TIMESTAMP + INTERVAL '1 day') RETURNING id INTO foreign_session_id;
     PERFORM pg_temp.expect_sqlstate(format('INSERT INTO public.sessions(user_id,token_hash,expires_at) VALUES (%L,sha256(''token-one''::bytea),CURRENT_TIMESTAMP+INTERVAL ''1 day'')', owner_id), '23505');
     PERFORM pg_temp.expect_sqlstate(format('UPDATE public.sessions SET consumed_at=CURRENT_TIMESTAMP,replaced_by_id=%L WHERE id=%L', foreign_session_id, session_id), '23503');
 
+    -- 幂等记录：同用户同路由的 key 不能重复；标记完成时必须同时保存响应信息。
     INSERT INTO public.idempotency_keys(user_id, route, key, request_hash)
         VALUES (owner_id, 'POST /api/v1/flashcards/bulk', 'test-key-123', sha256('body'::bytea));
     PERFORM pg_temp.expect_sqlstate(format('INSERT INTO public.idempotency_keys(user_id,route,key,request_hash) VALUES (%L,''POST /api/v1/flashcards/bulk'',''test-key-123'',sha256(''body''::bytea))', owner_id), '23505');
     PERFORM pg_temp.expect_sqlstate(format('UPDATE public.idempotency_keys SET status=''completed'' WHERE user_id=%L', owner_id), '23514');
     UPDATE public.idempotency_keys SET status = 'completed', response_status = 201, response_headers = '{}', response = '{"data":{}}' WHERE user_id = owner_id;
+    -- 安全备份：内联快照与对象存储 key 必须二选一，不能都缺失或同时存在。
     INSERT INTO public.safety_backups(user_id, reason, revision, snapshot, summary, size_bytes)
         VALUES (owner_id, 'before-restore', 0, '{"format":"medstudy-backup"}', '{}', 32);
     PERFORM pg_temp.expect_sqlstate(format('INSERT INTO public.safety_backups(user_id,reason,revision,summary,size_bytes) VALUES (%L,''before-restore'',0,''{}'',0)', owner_id), '23514');
     PERFORM pg_temp.expect_sqlstate(format('INSERT INTO public.safety_backups(user_id,reason,revision,snapshot,object_key,summary,size_bytes) VALUES (%L,''before-restore'',0,''{}'',''key'',''{}'',0)', owner_id), '23514');
+    -- 凭据结构：12 字节 nonce 的占位密文可保存，1 字节 nonce 应被拒绝；不测试真实加解密。
     INSERT INTO public.ai_credentials(user_id, ciphertext, nonce, key_version, last4)
         VALUES (owner_id, decode(repeat('00', 32), 'hex'), decode(repeat('00', 12), 'hex'), 1, 'abcd');
     PERFORM pg_temp.expect_sqlstate(format('INSERT INTO public.ai_credentials(user_id,ciphertext,nonce,key_version,last4) VALUES (%L,decode(repeat(''00'',32),''hex''),decode(''00'',''hex''),1,''abcd'')', other_id), '23514');
+    -- 导入预览：准备一条合法的临时预览，用于后面的用户删除级联检查。
     INSERT INTO public.import_previews(user_id, purpose, token_hash, payload_hash, ciphertext, nonce, key_version, summary, expires_at)
         VALUES (owner_id, 'backup_import', sha256('preview-token'::bytea), sha256('payload'::bytea), decode(repeat('00',32),'hex'), decode(repeat('00',12),'hex'), 1, '{}', CURRENT_TIMESTAMP + INTERVAL '5 minutes');
 
@@ -168,6 +186,7 @@ BEGIN
         RAISE EXCEPTION '临时考试复习记录被误删';
     END IF;
 
+    -- 删除用户：检查下列关联表已清理，同时另一个用户及其卡片仍然存在。
     DELETE FROM public.users WHERE id = owner_id;
     IF EXISTS (SELECT 1 FROM public.sessions WHERE user_id = owner_id)
         OR EXISTS (SELECT 1 FROM public.documents WHERE user_id = owner_id)
