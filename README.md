@@ -13,6 +13,9 @@ MedStudy 的独立 Go 后端项目。现有 React 前端位于相邻但完全独
 ## 开发文档
 
 - [从零学习 Go 并完成 MedStudy 后端](docs/GO_BACKEND_LEARNING_PATH.md)
+- [后端工程规范与结对开发分工](docs/ENGINEERING_GUIDE.md)
+- [PostgreSQL 初始化与 Navicat 导入](docs/DATABASE_SETUP.md)
+- [数据库详细设计：字段、关系、约束与事务](docs/DATABASE_DESIGN.md)
 - [API 接口契约](docs/GO_BACKEND_API.md)
 - [OpenAPI 3.1](docs/openapi.yaml)
 - [Git 分支入门](docs/GIT_BRANCH_GUIDE.md)

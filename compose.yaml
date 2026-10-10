@@ -1,0 +1,19 @@
+services:
+    db:
+        image: postgres:18
+        environment:
+            POSTGRES_USER: medstudy
+            POSTGRES_DB: medstudy
+            POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+        ports:
+            - "127.0.0.1:13445:5432"
+        volumes:
+            - postgres_data:/var/lib/postgresql/
+        healthcheck:
+            test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "medstudy", "-d", "medstudy"]
+            interval: 5s
+            timeout: 3s
+            retries: 10
+            start_period: 10s
+volumes:
+    postgres_data:

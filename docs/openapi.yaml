@@ -426,6 +426,11 @@ paths:
     post:
       tags: [Flashcards]
       operationId: createFlashcards
+      description: >-
+        Deduplicate within the current user and within the batch. Match a complete
+        originType/originId key first, then fall back to NFKC, trim, lowercase and
+        whitespace-normalized front/back content. Identical normalized content is
+        a duplicate even when origin keys differ.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -1395,6 +1400,10 @@ components:
                       message: { type: string }
     SourceFields:
       type: object
+      description: >-
+        Historical source IDs and display-name snapshots are retained when source
+        resources are deleted. New requests must validate existing sources within
+        the current user; restoring a backup may retain deleted historical sources.
       properties:
         sourceDocId: { oneOf: [{ $ref: "#/components/schemas/UUID" }, { type: "null" }] }
         sourceDocName: { type: [string, "null"] }

@@ -238,8 +238,8 @@ unknown
 
 去重顺序：
 
-1. 如果 `originType+originId` 均存在，按用户内来源键去重。
-2. 否则按用户内 `NFKC → trim → lower-case → 合并空白` 后的 `front+back` 去重。
+1. 如果 `originType+originId` 均存在，优先匹配用户内来源键。
+2. 来源键缺失或未命中时，按用户内 `NFKC → trim → lower-case → 合并空白` 后的 `front+back` 去重；不同来源但相同规范内容也不能重复。
 3. 批次内部也执行相同去重。
 
 ### 3.4 ReviewHistory
@@ -883,8 +883,12 @@ COS 旧数据由管理员 CLI 执行：管理员提供旧对象 key 与目标 us
 | `quick_quizzes` | user_id、options jsonb、reviewed、来源、created_at |
 | `safety_backups` | user_id、reason、schema_version、snapshot/对象 key、created_at |
 | `idempotency_keys` | user_id、route、key、request_hash、status、response、expires_at |
+| `import_previews` | user_id、purpose、token_hash 唯一、加密暂存、payload_hash、expires_at、used_at |
+| `schema_migrations` | 数据库结构版本、名称、applied_at；与备份 schemaVersion 独立 |
 
 用户隔离必须由每条 repository 查询的 `user_id` 条件保证。若使用复合外键，应让 `(user_id,id)` 具备唯一约束，避免错误关联到另一用户的资源。
+
+初始结构和导入方式见 [DATABASE_SETUP.md](DATABASE_SETUP.md)。来源 ID/名称按历史快照保留；内部 ref 字段提供存活资源的同用户复合外键，删除来源只清空 ref，不删除卡片/错题或抹掉历史来源。新建接口仍需验证来源当前存在，历史恢复允许已删除来源。
 
 ## 17. CORS 与浏览器配置
 
