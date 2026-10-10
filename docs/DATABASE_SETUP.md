@@ -120,7 +120,31 @@ bash scripts/verify_schema.sh
 
 临时容器的 trust 认证仅用于完全隔离的测试，不用于开发数据库或生产部署。工具没有配置 CI；按需运行。
 
-## 7. 参考
+## 7. Go 配置与真实连接验证
+
+本地配置由 `internal/config.LoadFile` 读取，连接由 `internal/platform/postgres.Open` 验证。两者已实现，但尚未组装进 API 启动流程。真实 `.env` 保持被 Git 忽略，只提交无秘密的 [.env.example](../.env.example)。
+
+本地文件应包含 `DATABASE_URL` 与 `POSTGRES_PASSWORD`：连接地址不内嵌密码，密码单独保存。保留已有正确密码，不用为运行测试复制或修改密码。当前本机连接地址使用端口 `13445`；`sslmode=disable` 仅用于本机开发，不作为生产 TLS 配置。
+
+在项目根目录运行：
+
+```bash
+MEDSTUDY_TEST_ENV_FILE=/Users/a-void/Code/MedStudy-Backend/.env \
+  go test -v ./internal/platform/postgres \
+  -run '^TestOpenIntegration$' -count=1 -timeout 15s
+```
+
+`MEDSTUDY_TEST_ENV_FILE` 是我们定义的测试选择项，不是 Go 标准变量。测试在明确选择文件后读取配置，用 `t.Setenv` 临时提供 pgx 的 `PGPASSWORD`，测试结束恢复原环境；不需要手动 source，也不自动扫描任意 `.env`。文件方式优先于直接设置 `MEDSTUDY_TEST_DATABASE_URL`。
+
+`go test` 的测试进程以被测包目录为工作目录，`.env` 与 `./.env` 都不会指向项目根目录。应传绝对路径；在项目根目录也可以写 `MEDSTUDY_TEST_ENV_FILE="$PWD/.env"`，由终端先展开为绝对路径。
+
+测试只连接并执行 `SELECT 1`，不建表、不修改数据，不验证全部表是否已导入。它实际连接当前本地开发库，不是假定存在一个独立测试库；未来有写入的数据库集成测试必须单独隔离。
+
+未指定文件或连接环境时显示 SKIP，不算真实连接通过。预期结果是 `PASS: TestOpenIntegration`；只分享测试结果，不分享真实文件、连接密码或密钥。此测试不能替代尚未实现的 API 鉴权、用户隔离和持久化验收。
+
+2026-10-10：用户确认使用正确配置路径后的真实连接测试通过；助手复核普通 Go 测试与 vet 通过。当前 API 启动流程尚未接入配置与数据库。
+
+## 8. 参考
 
 - [PostgreSQL 外键、复合约束与列级 SET NULL](https://www.postgresql.org/docs/18/ddl-constraints.html)
 - [PostgreSQL Unicode 文本处理](https://www.postgresql.org/docs/18/functions-string.html)

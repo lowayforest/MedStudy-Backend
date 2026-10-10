@@ -8,6 +8,39 @@
 - [Go 后端 API 接口文档](GO_BACKEND_API.md)
 - [OpenAPI 机器可读契约](openapi.yaml)
 
+### 已完成：数据库连接与本地配置读取
+
+已安装 pgx v5 依赖，下一步为“创建资料夹”接口准备 PostgreSQL 连接能力；暂不接入业务路由。
+
+- 用户已创建 `internal/platform/postgres/postgres.go`，在 `package postgres` 中实现 `Open(ctx context.Context, connString string) (*pgxpool.Pool, error)`。
+- 拒绝空白连接配置；创建连接池后必须 Ping 验证。失败返回 nil 和错误，Ping 失败时关闭已创建的池；成功返回池和 nil，由调用方负责关闭。
+- context 负责传递取消和截止时间；包装错误时保留原错误以支持 `errors.Is`。不要硬编码、记录或提交真实连接串/密码。
+- 助手已准备 [连接测试](../internal/platform/postgres/postgres_test.go)：配置非法、context 取消、假服务拒绝和可选真实数据库只读测试。
+- 2026-10-10：Open 的配置非法、context 取消和假服务拒绝测试均通过；助手再次运行 `go test ./...` 与 `go vet ./...` 通过。用户确认指定真实配置文件的 `TestOpenIntegration` 已通过；真实连接结果来自用户运行反馈，助手未读取真实 .env 或重复连接开发库。
+- 用户实现后运行 `go test -v ./internal/platform/postgres -timeout 15s`。真实连接优先通过 `MEDSTUDY_TEST_ENV_FILE` 指定本地配置文件，或直接设置 `MEDSTUDY_TEST_DATABASE_URL` 与密码环境。未配置导致 SKIP 不算真实数据库验收。
+- 本组配置读取与连接需求已完成上述验收，按约定审查并提交推送。后续学习显式密码传递和启动组装；当前成功的只读连接不表示业务表与资料夹接口已验收。
+
+### 已完成子任务：本地配置文件读取
+
+用户已准备真实 `.env`，其中有 `POSTGRES_PASSWORD` 与 `MEDSTUDY_TEST_DATABASE_URL`。当前先补齐配置读取，再组装连接并进行真实数据库验收。
+
+- 保留原有密码；在真实 `.env` 中新增 `DATABASE_URL` 作为应用连接地址，测试专用键不充当生产启动配置。无秘密的模板见 [环境配置示例](../.env.example)。
+- 用户安装 `github.com/joho/godotenv`，创建 `internal/config/config.go`；定义 `Config`，字段 `DatabaseURL string`、`DatabasePassword string`。
+- 实现 `LoadFile(filename string) (Config, error)`：使用 `godotenv.Read(filename)` 读取指定文件为 map，返回 Config，不修改进程环境。这里使用 Read 而不是有全局环境副作用的 Load。
+- `DATABASE_URL` 去首尾空白后不得为空；`POSTGRES_PASSWORD` 不能为空字符串，不裁剪或修改密码内容。失败返回零值 Config 和受控错误，错误中不能带密码或原配置行；语法错误也不能直接对外拼接解析器原文。
+- `LoadFile` 是本地显式文件读取能力，不代表生产环境优先级已经实现。后续在启动组装层明确选择文件配置或部署环境配置；不把读取文件或设置全局环境塞进 `postgres.Open`。
+- 助手已准备 [配置测试](../internal/config/config_test.go)，使用临时文件和假密码验证读取、缺项、空值、语法错误、密码原文保留及无环境变量副作用。2026-10-10：用户实现已通过这些测试。
+- 验收命令：`go test -v ./internal/config`。已讲解 Read 的两个返回值、map 查值和错误检查。
+- 连接集成测试已接入 Config：通过 `MEDSTUDY_TEST_ENV_FILE` 显式选择文件；测试读取 DATABASE_URL、临时设置 PGPASSWORD、调用 Open 并执行 SELECT 1，不写数据库。未选择真实连接时仍为 SKIP。
+- 真实连接已由用户确认通过；尚未组装进 API 启动，也不表示资料夹接口已实现。
+
+### 下一步：显式密码传递与 API 启动组装（待用户实现）
+
+- 当前真实连接测试借助临时 PGPASSWORD 提供密码；应用启动改为通过参数传递密码，不在应用代码中设置进程级密码环境。
+- 用户将 `postgres.Open` 改为 `Open(ctx context.Context, connString string, password string) (*pgxpool.Pool, error)`；保留空白地址检查，拒绝空密码但不裁剪密码。使用 `pgxpool.ParseConfig` 得到配置，设置 `poolConfig.ConnConfig.Password`，再用 `pgxpool.NewWithConfig` 创建连接池；保留 Ping、失败关闭和原始错误返回。
+- 助手负责在用户实现就绪后更新调用该函数的测试，并补充中文说明；接口变更期间可先用 `go build ./...` 检查业务代码，不要求用户手动改重复测试。
+- 下一小步在 `cmd/api` 组装读取配置、限时初始化数据库、启动 HTTP 和资源释放；组装实现前先讲解 `context.WithTimeout`、`defer` 与启动失败处理。
+
 ## 1. 先校准目标
 
 完成一个项目不能让任何人“一次性完全掌握”整个 Go 生态，但如果你真正完成本文中的代码、练习、测试和复盘，你应当能够：
@@ -122,7 +155,7 @@ Go 的 `internal` 目录会阻止仓库外的包直接导入这里的实现，�
 不要先连续看几周语法再开始项目。每个阶段都使用这个循环：
 
 1. 用自己的话解释本阶段概念。
-2. 先写一个失败测试或明确验收条件。
+2. 先明确验收条件；业务骨架就绪后由助手准备对应测试，不强制每段实现前都先制造失败测试。
 3. 实现能让测试通过的最小代码。
 4. 运行格式化、测试和静态检查。
 5. 阅读 diff，解释每一个错误分支。
