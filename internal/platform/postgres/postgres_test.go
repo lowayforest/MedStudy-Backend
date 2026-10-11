@@ -33,7 +33,7 @@ func TestOpenRejectsInvalidConnectionString(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
 
-			pool, err := Open(ctx, test.connString)
+			pool, err := Open(ctx, test.connString, "fixture-only-password")
 			if pool != nil {
 				t.Cleanup(pool.Close)
 			}
@@ -48,6 +48,28 @@ func TestOpenRejectsInvalidConnectionString(t *testing.T) {
 	}
 }
 
+// TestOpenRejectsEmptyPassword 验证空密码在连接前就被拒绝，返回错误和 nil 连接池。
+// 使用已取消的 context 区分输入校验与连接失败：预期是配置错误，不是 context.Canceled。
+// 本测试不连接真实数据库，也不使用真实密码。
+func TestOpenRejectsEmptyPassword(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	pool, err := Open(ctx, "postgres://medstudy@127.0.0.1:1/medstudy?sslmode=disable", "")
+	if pool != nil {
+		t.Cleanup(pool.Close)
+	}
+	if err == nil {
+		t.Fatal("空密码应该在连接前被拒绝")
+	}
+	if errors.Is(err, context.Canceled) {
+		t.Fatal("空密码应该先返回配置错误，而不是进入数据库连接阶段")
+	}
+	if pool != nil {
+		t.Fatal("空密码不应该返回可用连接池")
+	}
+}
+
 // TestOpenRespectsCanceledContext 验证已取消的初始化返回 context.Canceled 和 nil 连接池。
 // errors.Is 必须能识别取消原因，不能把它替换成丢失原因的普通错误。
 func TestOpenRespectsCanceledContext(t *testing.T) {
@@ -55,7 +77,7 @@ func TestOpenRespectsCanceledContext(t *testing.T) {
 	cancel()
 
 	// context 已取消，不需要真的连接这个地址。
-	pool, err := Open(ctx, "postgres://medstudy@127.0.0.1:1/medstudy?sslmode=disable")
+	pool, err := Open(ctx, "postgres://medstudy@127.0.0.1:1/medstudy?sslmode=disable", "fixture-only-password")
 	if pool != nil {
 		t.Cleanup(pool.Close)
 	}
@@ -88,7 +110,7 @@ func TestOpenRejectsNonPostgresServer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	connString := fmt.Sprintf("postgres://medstudy@%s/medstudy?sslmode=disable", listener.Addr())
-	pool, err := Open(ctx, connString)
+	pool, err := Open(ctx, connString, "fixture-only-password")
 	if pool != nil {
 		t.Cleanup(pool.Close)
 	}
@@ -106,6 +128,8 @@ func TestOpenIntegration(t *testing.T) {
 	// 必须显式选择数据库；只执行 SELECT 1，不建表、不写数据。
 	// 未配置时跳过不代表已经通过真实数据库验收。
 	connString := os.Getenv("MEDSTUDY_TEST_DATABASE_URL")
+	// 直接使用测试环境时读取 PGPASSWORD；选择文件时以文件中的密码为准。
+	password := os.Getenv("PGPASSWORD")
 	if filename := os.Getenv("MEDSTUDY_TEST_ENV_FILE"); filename != "" {
 		// 指定配置文件时，以该文件的地址和密码为准，不在日志中展示凭据。
 		cfg, err := config.LoadFile(filename)
@@ -113,9 +137,8 @@ func TestOpenIntegration(t *testing.T) {
 			t.Fatal("读取测试配置失败，请检查指定文件及 DATABASE_URL、POSTGRES_PASSWORD；不要公开密码")
 		}
 		connString = cfg.DatabaseURL
-		// 只在此测试期间提供密码，t.Setenv 会在测试结束时恢复原环境。
-		// 本地配置约定：地址不内嵌密码，密码来自独立 POSTGRES_PASSWORD。
-		t.Setenv("PGPASSWORD", cfg.DatabasePassword)
+		// 密码作为参数传入 Open，不设置进程环境，也不拼进连接字符串。
+		password = cfg.DatabasePassword
 	}
 	if connString == "" {
 		t.Skip("未设置 MEDSTUDY_TEST_ENV_FILE 或 MEDSTUDY_TEST_DATABASE_URL，真实数据库连接尚未验收")
@@ -124,7 +147,7 @@ func TestOpenIntegration(t *testing.T) {
 	// 连接和查询共用 5 秒超时；测试结束后取消 context 并关闭连接池。
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	pool, err := Open(ctx, connString)
+	pool, err := Open(ctx, connString, password)
 	if pool != nil {
 		t.Cleanup(pool.Close)
 	}

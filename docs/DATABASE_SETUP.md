@@ -122,7 +122,7 @@ bash scripts/verify_schema.sh
 
 ## 7. Go 配置与真实连接验证
 
-本地配置由 `internal/config.LoadFile` 读取，连接由 `internal/platform/postgres.Open` 验证。两者已实现，但尚未组装进 API 启动流程。真实 `.env` 保持被 Git 忽略，只提交无秘密的 [.env.example](../.env.example)。
+本地配置由 `internal/config.LoadFile` 读取，连接由 `internal/platform/postgres.Open` 验证。两者已组装进 `cmd/api.run`，2026-10-11 用户确认实际启动验收成功。真实 `.env` 保持被 Git 忽略，只提交无秘密的 [.env.example](../.env.example)。
 
 本地文件应包含 `DATABASE_URL` 与 `POSTGRES_PASSWORD`：连接地址不内嵌密码，密码单独保存。保留已有正确密码，不用为运行测试复制或修改密码。当前本机连接地址使用端口 `13445`；`sslmode=disable` 仅用于本机开发，不作为生产 TLS 配置。
 
@@ -134,7 +134,7 @@ MEDSTUDY_TEST_ENV_FILE=/Users/a-void/Code/MedStudy-Backend/.env \
   -run '^TestOpenIntegration$' -count=1 -timeout 15s
 ```
 
-`MEDSTUDY_TEST_ENV_FILE` 是我们定义的测试选择项，不是 Go 标准变量。测试在明确选择文件后读取配置，用 `t.Setenv` 临时提供 pgx 的 `PGPASSWORD`，测试结束恢复原环境；不需要手动 source，也不自动扫描任意 `.env`。文件方式优先于直接设置 `MEDSTUDY_TEST_DATABASE_URL`。
+`MEDSTUDY_TEST_ENV_FILE` 是我们定义的测试选择项，不是 Go 标准变量。测试在明确选择文件后读取配置，把地址和密码作为参数传入新版 `Open`；不设置进程级密码环境，不需要手动 source，也不自动扫描任意 `.env`。文件方式优先于直接设置 `MEDSTUDY_TEST_DATABASE_URL`。不使用文件时，测试从 `MEDSTUDY_TEST_DATABASE_URL` 和 `PGPASSWORD` 读取地址与密码。
 
 `go test` 的测试进程以被测包目录为工作目录，`.env` 与 `./.env` 都不会指向项目根目录。应传绝对路径；在项目根目录也可以写 `MEDSTUDY_TEST_ENV_FILE="$PWD/.env"`，由终端先展开为绝对路径。
 
@@ -143,6 +143,24 @@ MEDSTUDY_TEST_ENV_FILE=/Users/a-void/Code/MedStudy-Backend/.env \
 未指定文件或连接环境时显示 SKIP，不算真实连接通过。预期结果是 `PASS: TestOpenIntegration`；只分享测试结果，不分享真实文件、连接密码或密钥。此测试不能替代尚未实现的 API 鉴权、用户隔离和持久化验收。
 
 2026-10-10：用户确认使用正确配置路径后的真实连接测试通过；助手复核普通 Go 测试与 vet 通过。当前 API 启动流程尚未接入配置与数据库。
+
+上述独立真实连接测试记录对应原两参数版本；当前已改为显式密码参数，普通 Go 测试与 vet 再次通过。新版独立 TestOpenIntegration 未重复运行；用户确认下述实际启动和健康检查成功，启动中的 Open/Ping 验证了新版连接路径，不代表业务写入已验收。
+
+### 本地 API 启动验收
+
+2026-10-11：启动实现与失败路径测试完成，普通测试、vet 及 API/连接包竞态检查通过。用户将监听地址改为 `127.0.0.1:11345`，并确认实际启动与健康检查成功；成功路径结果来自用户运行反馈。启动方法如下，在项目根目录执行：
+
+```bash
+go run ./cmd/api
+```
+
+应先看到数据库连接成功，再看到访问地址和启动 Logo。此命令会读取根目录的 .env，连接本地开发库，不自动建表或插入业务数据；不要分享密码或完整配置。在另一终端执行：
+
+```bash
+curl --noproxy '*' -i http://127.0.0.1:11345/health/live
+```
+
+应返回 200 与 `{"status":"ok"}`。`--noproxy '*'` 使本地验证绕过代理；仅看到 Logo 不代表端口绑定成功，必须检查实际请求。HTTP 服务当前仅有健康检查路由，尚未实现鉴权、资料夹 API、生产环境配置或优雅停机。
 
 ## 8. 参考
 

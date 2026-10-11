@@ -31,15 +31,26 @@
 - `LoadFile` 是本地显式文件读取能力，不代表生产环境优先级已经实现。后续在启动组装层明确选择文件配置或部署环境配置；不把读取文件或设置全局环境塞进 `postgres.Open`。
 - 助手已准备 [配置测试](../internal/config/config_test.go)，使用临时文件和假密码验证读取、缺项、空值、语法错误、密码原文保留及无环境变量副作用。2026-10-10：用户实现已通过这些测试。
 - 验收命令：`go test -v ./internal/config`。已讲解 Read 的两个返回值、map 查值和错误检查。
-- 连接集成测试已接入 Config：通过 `MEDSTUDY_TEST_ENV_FILE` 显式选择文件；测试读取 DATABASE_URL、临时设置 PGPASSWORD、调用 Open 并执行 SELECT 1，不写数据库。未选择真实连接时仍为 SKIP。
-- 真实连接已由用户确认通过；尚未组装进 API 启动，也不表示资料夹接口已实现。
+- 连接集成测试已接入 Config：通过 `MEDSTUDY_TEST_ENV_FILE` 显式选择文件；原版临时设置 PGPASSWORD，当前版本把读取的地址和密码直接传入 Open，并执行 SELECT 1，不写数据库。未选择真实连接时仍为 SKIP。
+- 原版真实连接已由用户确认通过；当前配置已组装进 API 启动，2026-10-11 用户确认实际启动和健康检查成功，但资料夹接口尚未实现。
 
-### 下一步：显式密码传递与 API 启动组装（待用户实现）
+### 已完成：显式密码传递与本地 API 启动组装
 
-- 当前真实连接测试借助临时 PGPASSWORD 提供密码；应用启动改为通过参数传递密码，不在应用代码中设置进程级密码环境。
+- 原版真实连接测试借助临时 PGPASSWORD 提供密码；当前测试已改为通过参数传递密码，不再设置进程级密码环境。
 - 用户将 `postgres.Open` 改为 `Open(ctx context.Context, connString string, password string) (*pgxpool.Pool, error)`；保留空白地址检查，拒绝空密码但不裁剪密码。使用 `pgxpool.ParseConfig` 得到配置，设置 `poolConfig.ConnConfig.Password`，再用 `pgxpool.NewWithConfig` 创建连接池；保留 Ping、失败关闭和原始错误返回。
 - 助手负责在用户实现就绪后更新调用该函数的测试，并补充中文说明；接口变更期间可先用 `go build ./...` 检查业务代码，不要求用户手动改重复测试。
-- 下一小步在 `cmd/api` 组装读取配置、限时初始化数据库、启动 HTTP 和资源释放；组装实现前先讲解 `context.WithTimeout`、`defer` 与启动失败处理。
+- 用户已修正密码判空与 NewWithConfig 错误检查；助手已适配测试并新增空密码拒绝测试。2026-10-11：用户完成 run 中的配置读取、限时初始化和 HTTP 启动，主动把监听端口改为 11345，并引入 go-figure 打印启动 Logo；助手保留这些改动，go mod tidy 将该实际导入的库标记为直接依赖。
+- 助手补充 [启动失败测试](../cmd/api/main_test.go)：配置不存在、配置缺项/格式错误、假数据库拒绝连接、错误不泄露密码及不覆盖 PGPASSWORD。全部普通测试与 vet 通过，`go test -race ./cmd/api ./internal/platform/postgres -timeout 30s` 通过；不读取真实 .env，不连接开发数据库，不证明真实成功启动和成功路径连接池清理。
+- 2026-10-11 用户确认实际启动与 11345 健康检查请求成功；成功路径记录来自用户反馈，助手未读取真实 .env。助手再次运行普通测试与 vet 通过，本组需求验收完成，按约定审查并提交推送。新版独立 TestOpenIntegration 未重复运行，成功启动通过 run 中的 Open/Ping 验证连接，不代替业务表或写入验收。
+- 已讲解 `context.WithTimeout`、`defer`、包名限定调用、大小写导出规则与启动失败处理。
+- 用户在 `cmd/api/main.go` 定义 `run(filename string) error`：读取指定配置、用 5 秒初始化 context 调用三参数 Open、成功后安排 pool.Close、再启动原健康检查 HTTP 服务。配置失败返回受控配置错误，连接失败返回不含凭据的受控错误；HTTP 启动错误返回调用方。在 main 中调用 `run(".env")`，由 main 记录失败并退出，run 内不调用 log.Fatal。
+- 本次完成本地启动组装，不把 5 秒初始化 context 复用于未来业务查询；defer 只保证函数退出时清理，当前未实现信号处理和 HTTP 优雅停机，不能声称 Ctrl+C 已走完整清理流程。
+
+### 当前业务任务：创建资料夹（从业务模型开始）
+
+- 继续沿同一接口实现数据库插入、service、HTTP 和鉴权/用户隔离；不把未鉴权的公开接口当作完整业务交付。
+- 下一小步由用户创建 `internal/folder/folder.go`，定义包级 `Folder` 结构体：ID、UserID、Name、Type 为 string，CreatedAt 为 time.Time。CreateInput 是创建前的输入，Folder 是持久化后返回的业务对象；ID 与创建时间由数据库生成，UserID 来自认证上下文。
+- Folder 暂不添加 JSON 标签；未来 HTTP DTO 不包含 UserID，CreatedAt 转为契约中的 epoch 毫秒。该结构体只是模型，尚不代表数据库插入和 HTTP 接口完成；用户写好后先编译，再进入参数化 INSERT / RETURNING / QueryRow / Scan，助手承担测试准备，不为纯字段声明增加重复教学测试。
 
 ## 1. 先校准目标
 
