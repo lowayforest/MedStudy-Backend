@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -73,5 +74,45 @@ func TestDecodeJSONRejectsOversizedBody(t *testing.T) {
 	}
 	if tooLarge.Limit != maxJSONBodyBytes {
 		t.Fatalf("请求体大小上限不正确：得到 %d，期望 %d", tooLarge.Limit, maxJSONBodyBytes)
+	}
+}
+
+// TestWriteJSONWritesResponse 验证成功编码后写出指定状态码、JSON 类型和正文。
+// 使用内存响应记录器，不启动服务器或连接数据库。
+func TestWriteJSONWritesResponse(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	value := map[string]string{"message": "创建成功"}
+	if err := writeJSON(recorder, http.StatusCreated, value); err != nil {
+		t.Fatalf("写入合法 JSON 响应失败：%v", err)
+	}
+	result := recorder.Result()
+	t.Cleanup(func() { _ = result.Body.Close() })
+	if result.StatusCode != http.StatusCreated {
+		t.Fatalf("状态码不正确：得到 %d，期望 %d", result.StatusCode, http.StatusCreated)
+	}
+	if got := result.Header.Get("Content-Type"); got != "application/json; charset=utf-8" {
+		t.Fatalf("Content-Type 不正确：%q", got)
+	}
+	var body map[string]string
+	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
+		t.Fatalf("响应正文不是有效 JSON：%v", err)
+	}
+	if body["message"] != value["message"] {
+		t.Fatalf("响应正文内容不正确：%v", body)
+	}
+}
+
+// TestWriteJSONEncodingFailureDoesNotWrite 验证无法编码时保留原始错误且不开始写 HTTP 响应。
+// channel 是标准库不支持的 JSON 类型；响应记录器仅在内存中使用。
+func TestWriteJSONEncodingFailureDoesNotWrite(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	recorder.Code = 0 // 用零值标记是否调用过 WriteHeader，默认的 200 无法区分。
+	err := writeJSON(recorder, http.StatusCreated, make(chan int))
+	var unsupported *json.UnsupportedTypeError
+	if !errors.As(err, &unsupported) {
+		t.Fatalf("无法编码时应返回 json.UnsupportedTypeError，得到 %v", err)
+	}
+	if recorder.Code != 0 || recorder.Header().Get("Content-Type") != "" || recorder.Body.Len() != 0 {
+		t.Fatal("编码失败时不应写状态码、响应头或正文")
 	}
 }
