@@ -93,6 +93,17 @@
 - 用户实现 `newFolderResponse(value folder.Folder) folderResponse`，复制公开业务字段，并用 CreatedAt.UnixMilli() 返回 epoch 毫秒整数；不把 time.Time 默认 JSON 字符串直接当作契约中的时间。
 - 新概念为结构体 JSON 标签及 HTTP DTO 与业务对象的区别；写好可编译实现后，助手准备带中文注释的转换测试，检查字段名称、时间单位和无 UserID 泄露，不为单纯字段声明增加测试。
 - 本小步尚未创建 HTTP 业务代码，不修改 cmd/api 路由，不硬编码用户 ID；随后再实现 handler、严格 JSON 解码和统一响应，结合认证上下文与 requestId 完成安全组装。
+- 后续用户已创建请求/响应 DTO 和 newFolderResponse；转换实现与 UnixMilli 用法正确，`go build ./...` 通过，但响应 ID、Name、CreatedAt 的 JSON 标签缺少必要双引号，`go vet ./internal/httpapi` 失败。
+- 助手新增 [响应转换测试](../internal/httpapi/folder_dto_test.go)：验证公开字段、带毫秒且非 UTC 时间点、四个约定 JSON 键及不包含 UserID。诊断时临时关闭 vet 执行此单测，确认当前输出为 ID/Name/CreatedAt，未符合 id/name/createdAt；这不是通过验收。用户需修正标签为 `json:"id"`、`json:"name"`、`json:"createdAt"` 后重新运行默认测试和 vet；助手未修改业务代码，当前不提交推送未通过的小步。
+- 用户已修正三个 JSON 标签；默认 `go test -v ./internal/httpapi -count=1` 通过。本次 HTTP 数据边界子任务仅完成请求/响应 DTO 与转换，不包含 Handler 或业务路由；全项目普通测试、vet 复核后按约定提交推送，提交采用英文前缀和中文说明。
+
+### 下一小步：Handler 使用的 JSON 请求解码
+
+- 用户创建 `internal/httpapi/json.go`，定义 `maxJSONBodyBytes = 1 << 20`（普通请求 1 MiB）与受控错误 ErrUnsupportedMediaType、ErrMultipleJSONValues，实现 `decodeJSON(w http.ResponseWriter, r *http.Request, dst any) error`。
+- 函数用 mime.ParseMediaType 检查 Content-Type，仅接受 application/json，可带 charset 等参数；用 http.MaxBytesReader 限制请求体，再使用 json.Decoder 和 DisallowUnknownFields 将请求解码到调用方传入的 DTO 指针。
+- 第一次 Decode 失败直接返回错误；第二次 Decode 用于确认剩余内容只有空白并到达 io.EOF，若还能读到一个值则返回 ErrMultipleJSONValues，其他读取错误原样保留。注意仅“额外值为空”的判断不能代替第二次读取；第一次空 body 的 EOF 也是失败。
+- 新概念为 any 接口、请求 Body 作为读取来源、流式 JSON Decoder、MIME 解析和 EOF；解释后由用户编写，助手等可编译实现后补有限的成功/非法/边界测试，不重复业务名称规则。
+- 此 helper 只返回内部错误，不写 HTTP 错误响应、不记录原始 body；后续 Handler 按类型映射 400/413/415，并生成契约中的受控错误及 meta.requestId，不向客户端暴露解析器原始错误。仍不注册未鉴权的业务路由，不接受客户端 userID 作为可信身份。
 
 ## 1. 先校准目标
 
