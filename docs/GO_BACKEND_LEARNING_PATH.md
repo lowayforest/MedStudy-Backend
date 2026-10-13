@@ -51,6 +51,48 @@
 - 继续沿同一接口实现数据库插入、service、HTTP 和鉴权/用户隔离；不把未鉴权的公开接口当作完整业务交付。
 - 下一小步由用户创建 `internal/folder/folder.go`，定义包级 `Folder` 结构体：ID、UserID、Name、Type 为 string，CreatedAt 为 time.Time。CreateInput 是创建前的输入，Folder 是持久化后返回的业务对象；ID 与创建时间由数据库生成，UserID 来自认证上下文。
 - Folder 暂不添加 JSON 标签；未来 HTTP DTO 不包含 UserID，CreatedAt 转为契约中的 epoch 毫秒。该结构体只是模型，尚不代表数据库插入和 HTTP 接口完成；用户写好后先编译，再进入参数化 INSERT / RETURNING / QueryRow / Scan，助手承担测试准备，不为纯字段声明增加重复教学测试。
+- 2026-10-11：用户已创建 Folder，`go build ./...` 通过。2026-10-12 已检查创建时间字段修正为 CreatedAt。本需求尚未完成，模型不单独作为完整资料夹需求提交推送。
+- 下一步由用户创建 `internal/platform/postgres/folder_repository.go`，使用 package postgres：定义 `FolderRepository`，保存私有 `pool *pgxpool.Pool`；实现 `NewFolderRepository(pool *pgxpool.Pool) *FolderRepository`，复用传入的连接池，不在仓储中创建或关闭应用连接池。
+- 实现方法 `func (r *FolderRepository) Create(ctx context.Context, userID string, input folder.CreateInput) (folder.Folder, error)`。此方法只负责持久化，调用方提供已校验、已去除首尾空白的名称及可信用户 ID；校验/标准化与认证在后续 service/HTTP 层串联。数据库外键仍要求用户存在，不要用硬编码用户 ID 绕过认证。
+- SQL 使用 `INSERT INTO public.folders (user_id, name, type) VALUES ($1, $2, $3) RETURNING id::text, user_id::text, name, type, created_at`；参数按 userID、input.Name、input.Type 传入 QueryRow，禁止拼接用户输入。用 Scan 将五列按同一顺序写入 Folder 字段，失败返回零值 Folder 和原始错误，成功返回创建结果与 nil；不在仓储中打印输入、密码或原始数据库错误。
+- 助手在实现可编译后准备中文注释测试，写入场景使用独立隔离数据库及测试用户，不沿用仅供 SELECT 1 的开发库集成测试；当前不执行任何业务 INSERT，不改 API 路由，也不声称已完成 revision 事务、鉴权或 HTTP 验收。
+- 2026-10-12：用户已实现 FolderRepository.Create；`go build ./...` 通过，但 `go vet ./...` 报告构造函数复制连接池内部不可复制状态。用户需将字段改为 `pool *pgxpool.Pool`，构造函数直接保存 `pool`，不解引用复制。此外 SQL 中 `created_ai` 应修正为实际列名 `created_at`；Go 编译不校验 SQL 字符串中的列名。助手未修改业务代码，未连接开发数据库或执行 INSERT；待两处修正后补充仓储测试。
+- 2026-10-13：SQL 列名已修正为 `created_at`，字段已改为 `*pgxpool.Pool`；构造函数仍使用 `pool: *pool`，导致 `go build ./...` 类型不匹配。下一步仅需由用户改为 `pool: pool` 并保存，再继续编译与测试准备；当前未执行数据库写入。
+- 2026-10-13 后续：用户已将构造函数修正为 `pool: pool`，`go build ./...` 与 `go vet ./...` 通过。助手新增 [仓储测试](../internal/platform/postgres/folder_repository_test.go)，检查同一连接池指针复用、已取消的 Create 保留错误并返回零值；全部普通测试和仓储相关 race 检查通过。验证时显式取消真实数据库测试选项，没有读取 .env 或连接开发库。
+- 已准备显式开启的 `TestFolderRepositoryIntegration`：测试自身新建 PostgreSQL 18 容器，使用 tmpfs、随机回环端口及假凭据，导入真实迁移并创建测试用户；覆盖中文名称、两种资料夹类型、不同用户、名称特殊字符、UUID/时间与真实存储一致、外键和 CHECK 拒绝写入。结束时仅清理本次新建并验证专用标签的容器；不接收外部数据库 URL，不复用开发库。当前未运行该 Docker 测试，默认 SKIP 不算写入验收。
+- 下一步由用户在 Docker 已启动、本机已有 `postgres:18` 镜像时运行：`MEDSTUDY_TEST_FOLDER_DOCKER=1 go test -v ./internal/platform/postgres -run '^TestFolderRepository' -count=1 -timeout 2m`。真实插入通过后再进入 service；revision 与资料夹写入必须在后续同一事务中实现，当前基础插入方法尚不是完整接口。不提前提交推送本次未完成的资料夹需求。
+- 2026-10-13：用户确认独立 Docker 仓储测试成功；此真实插入结果来自用户反馈，助手未重复启动容器或连接开发数据库。
+
+### 下一小步：资料夹 Service 的校验与编排
+
+- 用户创建 `internal/folder/repository.go`：在使用方定义 `Repository` 接口，只声明 `Create(ctx context.Context, userID string, input CreateInput) (Folder, error)`。方法签名匹配的 `*postgres.FolderRepository` 会隐式实现该接口，不需要 implements；folder 包不导入 postgres，避免数据库耦合和循环导入。
+- 用户创建 `internal/folder/service.go`：定义 `Service` 保存私有 `repo Repository`，实现 `NewService(repo Repository) *Service` 和 `(*Service).Create(ctx context.Context, userID string, input CreateInput) (Folder, error)`。
+- 用户发现 Service 和校验函数重复 trim，改为 `PrepareCreateInput(input CreateInput) (CreateInput, error)`：统一去空格和校验，失败返回零值输入与约定错误，成功返回标准化输入。保留 ValidateCreateInput，通过 PrepareCreateInput 复用规则，只返回错误，不重复维护校验逻辑。
+- Service.Create 调用 PrepareCreateInput；失败返回零值 Folder 和对应错误，不调用仓储。合法输入将同一 ctx、可信 userID 和 prepared 传给仓储，成功返回仓储结果；仓储失败返回零值 Folder 和可识别的原始错误，不打印原始错误或业务输入。
+- 此阶段只学习单次创建的业务编排，不实现 HTTP、不从请求体获取用户身份。后续接入 HTTP 前仍必须把插入与 revision 递增放入同一事务，并加入认证和用户隔离，不能把当前单次 INSERT 视为完整事务需求。
+- 用户已完成 Service.Create；助手新增带中文注释的 [service 测试](../internal/folder/service_test.go)，聚焦成功、非法输入、仓储失败三类场景，使用假仓储而非真实数据库。原校验测试复用同一组案例检查 PrepareCreateInput 的返回值，不另写重复边界表。`go build ./...`、`go vet ./...`、资料夹包测试和全部普通测试通过；验证时关闭真实数据库选择项，没有读取 .env 或再次启动 Docker。
+- 成功分支目前写 `return created, err`，在前面已排除错误后行为正确；建议用户改为更明确的 `return created, nil`。业务注释目前较简略，且 validation.go 留有旧 TODO/待完成提示，助手给出准确中文注释建议，由用户清理；未替用户修改业务实现。
+- 用户新增约定：后续每次提供方法提示，也给出该方法的中文注释。下一步讲解事务及 revision：创建资料夹和用户数据版本递增必须共同提交或回滚，遵守先锁用户行的顺序，SQL 统一使用同一 tx；尚未实现事务，当前不接入 HTTP，也不提交推送完整资料夹需求。
+
+### 已完成子需求：资料夹业务基础与事务化创建
+
+- 保持 Service 和 Repository 接口签名不变，由用户改造 PostgreSQL 的 FolderRepository.Create，使它成为“插入资料夹并递增 revision”的原子仓储操作。这是单次业务命令的具体 SQL 事务；未来跨仓储操作由应用层编排，folder 业务包不导入 pgx。
+- 操作顺序为 Begin → 锁定当前用户行 → 使用 tx.QueryRow 执行现有 INSERT/RETURNING/Scan → tx.Exec 将该用户 revision 加 1 → Commit。全部 SQL 使用同一个 tx，不能夹杂 pool.QueryRow；每步检查错误，只有提交成功才能返回创建对象。
+- 用户行锁 SQL 为 `SELECT id FROM public.users WHERE id = $1 FOR UPDATE`；这里可用 tx.Exec 执行，只要求加锁而不读取字段。不存在的用户最终由 INSERT 外键拒绝，保留当前隔离测试的外键错误行为。
+- Begin 成功后安排 Rollback，使用独立且有超时的清理 context，不复用可能已取消的请求 context；提交成功后的重复 Rollback 可安全调用。版本更新限定 user_id，检查更新行数为 1，失败不能返回成功对象。
+- 方法注释应准确说明原子创建、revision 更新和失败返回。助手待用户完成可编译实现后补版本递增和失败回滚的隔离测试，不提前向开发库写入，也不修改用户业务实现。
+- Git 时机：当前先不提交未完成的事务；本子任务验证通过后，将“资料夹业务基础（模型、准备输入、Service、事务仓储及测试）”作为清晰的子需求提交并 push 一次，不必等全部 HTTP/认证接口完成。提交说明不声称完整创建资料夹 API 已交付。
+- 用户已完成事务实现并修正同层 err 重复声明、public 拼写及版本更新后的错误检查。助手复核 Begin、用户行锁、同一 tx 上的两条写入、更新行数检查、Commit 和独立限时 Rollback 清理；未修改业务代码。
+- 助手扩展现有隔离集成测试，不重复创建一套用例：每次成功检查目标用户资料夹数量及 revision 各加 1，另一用户不变；现有 INSERT 失败案例同时检查资料夹及版本未变。新增“版本更新失败撤销资料夹”：仅在专用临时数据库给测试用户设置 bigint 最大版本，使第二条写入产生 SQLSTATE 22003，验证前面的 INSERT 也被回滚且返回零值结果。
+- 当前 `go build ./...`、`go vet ./...`、全部普通测试及 folder/postgres 包 race 检查通过。新版事务集成测试尚未运行；此前用户确认的真实插入测试不代替本次新增的 revision/回滚验收。下一步仍由用户显式运行 `MEDSTUDY_TEST_FOLDER_DOCKER=1 go test -v ./internal/platform/postgres -run '^TestFolderRepository' -count=1 -timeout 2m`；通过后审查相关 diff 和敏感信息，提交推送业务基础子需求。
+- 后续用户确认新版事务隔离测试 PASS，完成成功递增、用户范围和失败回滚验收；真实数据库结果来自用户运行反馈，助手未重复启动容器或连接开发库。资料夹业务基础子需求已具备模型、标准化校验、Service、原子仓储及对应测试，按约定审查相关改动后提交推送；不声称鉴权或 HTTP 接口已完成。
+
+### 下一小步：HTTP 数据边界
+
+- 用户创建 `internal/httpapi/folder_dto.go`，使用 package httpapi，定义创建请求 DTO 与资料夹响应 DTO；JSON 字段遵守现有契约。请求只含 name、type，不接收客户端提供的 userID；响应只含 id、name、type、createdAt，不暴露 UserID。
+- 用户实现 `newFolderResponse(value folder.Folder) folderResponse`，复制公开业务字段，并用 CreatedAt.UnixMilli() 返回 epoch 毫秒整数；不把 time.Time 默认 JSON 字符串直接当作契约中的时间。
+- 新概念为结构体 JSON 标签及 HTTP DTO 与业务对象的区别；写好可编译实现后，助手准备带中文注释的转换测试，检查字段名称、时间单位和无 UserID 泄露，不为单纯字段声明增加测试。
+- 本小步尚未创建 HTTP 业务代码，不修改 cmd/api 路由，不硬编码用户 ID；随后再实现 handler、严格 JSON 解码和统一响应，结合认证上下文与 requestId 完成安全组装。
 
 ## 1. 先校准目标
 

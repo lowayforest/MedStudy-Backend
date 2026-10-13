@@ -162,6 +162,23 @@ curl --noproxy '*' -i http://127.0.0.1:11345/health/live
 
 应返回 200 与 `{"status":"ok"}`。`--noproxy '*'` 使本地验证绕过代理；仅看到 Logo 不代表端口绑定成功，必须检查实际请求。HTTP 服务当前仅有健康检查路由，尚未实现鉴权、资料夹 API、生产环境配置或优雅停机。
 
+### 资料夹仓储的独立写入测试
+
+在项目根目录执行，先确认 Docker 已启动且本机已有 `postgres:18` 镜像：
+
+```bash
+MEDSTUDY_TEST_FOLDER_DOCKER=1 go test -v ./internal/platform/postgres \
+  -run '^TestFolderRepository' -count=1 -timeout 2m
+```
+
+测试代码位于 [folder_repository_test.go](../internal/platform/postgres/folder_repository_test.go)。这里的环境变量只开启独立测试，不设置数据库密码，也不选取 `.env`。该测试不接收开发库 URL，不复用 Compose 的 db：它自己创建临时容器，以 tmpfs 保存数据，只发布随机的 `127.0.0.1` 端口，使用无实际价值的测试凭据，导入真实迁移，再创建测试用户和资料夹。镜像使用 `--pull=never`，不会自动下载。
+
+测试检查 INSERT/RETURNING/Scan、UUID 与创建时间、持久化字段、不同用户 ID、特殊字符参数，以及外键和 CHECK 的失败路径。事务版另检查每次成功创建仅递增当前用户 revision 一次，插入失败时版本不变；在临时库准备 bigint 最大版本的测试用户，使版本递增失败，确认前面的资料夹插入一并回滚。结束时先关闭连接池，再核实专用标签并删除本次创建的容器；这些临时测试数据会随之丢弃，不影响项目容器和数据卷。若清理失败，测试会明确提示检查带 `medstudy.folder-test` 标签的临时容器。
+
+不设置 `MEDSTUDY_TEST_FOLDER_DOCKER=1` 时，真实写入测试显示 SKIP，不代表通过。2026-10-13：普通测试、vet 与仓储相关 race 检查通过；随后用户确认独立 Docker 写入测试成功，此结果来自用户反馈，助手未重复运行。该测试通过不代表 HTTP 鉴权、用户隔离和 revision 事务已经实现。
+
+后续用户已实现事务创建，助手扩展上述 revision/回滚测试，编译、vet、全部普通测试及 folder/postgres 相关 race 检查通过。用户随后确认新版事务隔离测试 PASS，真实结果来自用户反馈，助手未重复启动容器或连接开发库；HTTP 鉴权及资料夹路由仍未实现。
+
 ## 8. 参考
 
 - [PostgreSQL 外键、复合约束与列级 SET NULL](https://www.postgresql.org/docs/18/ddl-constraints.html)

@@ -7,6 +7,7 @@ import (
 )
 
 // TestValidateCreateInput 验证创建资料夹的名称和类型规则；合法输入返回 nil，非法输入返回约定错误。
+// 重构后复用同一组案例，额外检查 PrepareCreateInput 的标准化结果和失败零值，不重复另写边界表。
 // 这里只调用业务校验函数，不发送 HTTP 请求，也不写入数据库。
 func TestValidateCreateInput(t *testing.T) {
 	tests := []struct {
@@ -73,6 +74,21 @@ func TestValidateCreateInput(t *testing.T) {
 			err := ValidateCreateInput(test.input)
 			if !errors.Is(err, test.wantErr) {
 				t.Fatalf("期望错误 %v，实际得到 %v", test.wantErr, err)
+			}
+			// 准备函数既要遵守原校验规则，也要把处理后的输入真正返回给 Service。
+			prepared, err := PrepareCreateInput(test.input)
+			if !errors.Is(err, test.wantErr) {
+				t.Fatalf("准备输入期望错误 %v，实际得到 %v", test.wantErr, err)
+			}
+			if test.wantErr != nil {
+				if prepared != (CreateInput{}) {
+					t.Fatal("准备失败应该返回零值输入，避免调用方误用部分数据")
+				}
+				return
+			}
+			want := CreateInput{Name: strings.TrimSpace(test.input.Name), Type: test.input.Type}
+			if prepared != want {
+				t.Fatal("准备成功应该返回去首尾空白后的名称，并保留原类型")
 			}
 		})
 	}
