@@ -108,6 +108,7 @@
 - 用户继续实现 `writeJSON`：先 `json.Marshal`，再设置 JSON Content-Type、写状态码和正文，编码或写入失败时返回错误。助手补中文方法注释与两个内存响应测试，验证 201/响应头/正文及编码失败时不写响应；此 helper 仍由后续 Handler 传入契约要求的 `data`、`meta.requestId` 等响应封装，不自行决定业务状态码。
 - 用户实现成功响应封装 `responseMeta`、`successResponse` 和 `writeSuccess`，复用 `writeJSON` 输出 `data` 与 `meta.requestId`。助手用内存响应测试验证 201、JSON 头和准确的外层字段；初版 `requestId` 标签缺少冒号，用户修正后 `go test ./...`、`go vet ./...` 均通过。成功响应的状态使用 HTTP 状态码，业务错误码只在错误响应的 `error.code` 中；下一步实现统一错误响应。
 - 用户继续实现错误响应封装 `errorDetails`、`errorResponse` 和 `writeError`，复用 `writeJSON` 输出 `error` 与 `meta.requestId`。`fields,omitempty` 仅在有字段错误时输出，`retryable` 保留 false 值；助手新增内存测试覆盖这两种情况和状态码/JSON 头。初版 `message` 标签少冒号，用户自行修正后定向测试与 vet 通过；尚未实现 Handler 的错误分类或业务路由。
+- 用户实现 `writeDecodeError`：对不支持的 JSON 媒体类型返回 415、对 `*http.MaxBytesError` 返回 413、其余解析错误返回 400，使用 `writeError` 输出受控错误详情与 requestId。助手新增内存响应测试，覆盖包装错误的 `errors.Is`/`errors.As` 分类和不泄露内部错误文字；此函数由后续 Handler 在 `decodeJSON` 失败时调用，尚未注册业务路由。
 
 ## 1. 先校准目标
 
