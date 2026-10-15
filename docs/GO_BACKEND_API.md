@@ -129,6 +129,17 @@ refresh token 只存在 `HttpOnly; Secure; SameSite=Strict` Cookie 中，数据�
 | `503` | 数据库或必要依赖未就绪 |
 | `504` | 上游超时 |
 
+`error.code` 是应用层稳定标识，由本项目约定；HTTP 状态码仍放在响应状态行中。创建资料夹接口当前使用以下错误码，`message` 是给用户看的安全说明，不用于客户端分支判断：
+
+| HTTP 状态 | `error.code` | 场景 |
+| --- | --- | --- |
+| `400` | `invalid_json` | JSON 语法、字段或单值要求不符合请求格式 |
+| `400` | `validation_failed` | 资料夹名称或类型不符合要求，`fields` 指出字段 |
+| `401` | `unauthorized` | 缺少可信的登录身份 |
+| `413` | `request_too_large` | JSON 请求体超限 |
+| `415` | `unsupported_media_type` | 请求不是 `application/json` |
+| `500` | `internal_error` | 未预期的服务端错误，响应不包含内部错误详情 |
+
 AI 错误的 `error.code` 保留前端现有分类：
 
 ```text
