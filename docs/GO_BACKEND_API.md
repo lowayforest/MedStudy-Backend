@@ -357,17 +357,17 @@ AI 生成的 ExamQuestion 未入快刷库前没有 `reviewed`、`createdAt`，�
 ```json
 {
   "username": "demo",
-  "password": "a long passphrase",
+  "password": "Example!Password2026",
   "timezone": "Asia/Shanghai"
 }
 ```
 
-规则：username 3～32 个字符，规范化后唯一；密码最少 12 字符、最大 128 字节。返回 `201`、用户和 access token，并设置 refresh Cookie。
+规则：username 3～32 个字符，规范化后唯一；密码为 8～128 个可见 ASCII 字符（英文字母、数字、英文标点；不接受空格、汉字和全角符号），且至少包含一个大写字母、一个小写字母和一个英文标点符号（如 `!`、`@`、`#`）。数字不是必填；密码原样校验，不裁剪空白。返回 `201`、用户和 access token，并设置 refresh Cookie。
 
 ### `POST /auth/login`
 
 ```json
-{ "username": "demo", "password": "a long passphrase" }
+{ "username": "demo", "password": "Example!Password2026" }
 ```
 
 用户名不存在和密码错误统一返回 `401 invalid_credentials`，避免枚举账号。

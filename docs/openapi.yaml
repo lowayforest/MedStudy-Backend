@@ -1254,7 +1254,15 @@ components:
       required: [username, password]
       properties:
         username: { type: string, minLength: 3, maxLength: 32 }
-        password: { type: string, minLength: 12, maxLength: 128, writeOnly: true }
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+          pattern: '^[!-~]+$'
+          writeOnly: true
+          description: >-
+            8～128 个可见 ASCII 字符，不接受空格、汉字或全角符号；至少包含一个
+            大写字母、一个小写字母和一个英文标点符号。密码原样校验，不裁剪空白；数字不是必填。
         timezone: { type: string, default: Asia/Shanghai }
     LoginRequest:
       type: object
