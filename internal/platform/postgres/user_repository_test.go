@@ -50,6 +50,11 @@ func TestUserRepositoryCreateIntegration(t *testing.T) {
 	if err != nil || found != created || foundHash != passwordHash {
 		t.Fatal("应按规范化用户名找到同一用户及其密码哈希，供登录服务验证")
 	}
+	// 未找到用户应转成业务层可识别的错误，不让 auth 包依赖 pgx。
+	_, _, err = repo.FindByUsername(ctx, "Nobody")
+	if !errors.Is(err, auth.ErrUserNotFound) {
+		t.Fatal("不存在的用户名应返回 auth.ErrUserNotFound")
+	}
 
 	// 数据库会规范化用户名，因此大小写不同的同名用户也不能重复注册。
 	_, err = repo.CreateUser(ctx, auth.CreateUserInput{

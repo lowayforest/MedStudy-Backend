@@ -2,7 +2,9 @@ package postgres
 
 import (
 	"context"
+	"errors"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/lowayforest/MedStudy-Backend/internal/auth"
 )
@@ -53,6 +55,9 @@ func (r *UserRepository) FindByUsername(ctx context.Context, username string) (a
 	)
 
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return auth.User{}, "", auth.ErrUserNotFound
+		}
 		return auth.User{}, "", err
 	}
 

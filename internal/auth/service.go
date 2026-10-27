@@ -1,6 +1,9 @@
 package auth
 
-import "context"
+import (
+	"context"
+	"errors"
+)
 
 type Service struct {
 	repo Repository
@@ -29,6 +32,33 @@ func (s *Service) Register(ctx context.Context, input RegisterInput) (User, erro
 
 	if err != nil {
 		return User{}, err
+	}
+
+	return user, nil
+}
+
+// Login 校验用户名和密码，成功时返回用户；不在这里签发 token
+func (s *Service) Login(ctx context.Context, input LoginInput) (User, error) {
+	// 根据用户名读取账号和密码哈希
+	user, passwordHash, err := s.repo.FindByUsername(ctx, input.Username)
+	// 区分账号不存在与数据库异常
+	if err != nil {
+		if errors.Is(err, ErrUserNotFound) {
+			return User{}, ErrInvalidCredentials
+		}
+		return User{}, err
+	}
+	// 用用户输入的原始密码校验哈希
+
+	isCorrect, err := VerifyPassword(input.Password, passwordHash)
+
+	// 区分校验异常与密码不匹配
+	if err != nil {
+		return User{}, err
+	}
+
+	if !isCorrect {
+		return User{}, ErrInvalidCredentials
 	}
 
 	return user, nil

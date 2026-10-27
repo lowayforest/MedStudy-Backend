@@ -13,6 +13,10 @@ type fakeUserRepository struct {
 	createdWith CreateUserInput
 	result      User
 	err         error
+	findCalls   int
+	foundUser   User
+	foundHash   string
+	findErr     error
 }
 
 func (f *fakeUserRepository) CreateUser(_ context.Context, input CreateUserInput) (User, error) {
@@ -22,6 +26,11 @@ func (f *fakeUserRepository) CreateUser(_ context.Context, input CreateUserInput
 		return f.result, f.err
 	}
 	return f.result, nil
+}
+
+func (f *fakeUserRepository) FindByUsername(_ context.Context, _ string) (User, string, error) {
+	f.findCalls++
+	return f.foundUser, f.foundHash, f.findErr
 }
 
 // TestServiceRegister 验证注册服务先清理和校验输入，再把密码哈希交给仓储；
