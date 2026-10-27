@@ -34,3 +34,28 @@ func (r *UserRepository) CreateUser(ctx context.Context, input auth.CreateUserIn
 	return created, nil
 
 }
+
+// FindByUsername 按数据库的用户名规范化规则查找用户和密码哈希，供登录验证使用
+func (r *UserRepository) FindByUsername(ctx context.Context, username string) (auth.User, string, error) {
+	//定义SQL
+	const query = `select id::text, username, timezone, created_at, password_hash from public.users where username_key = public.medstudy_normalize_text($1)`
+
+	var selected auth.User
+
+	var passwordHash string
+
+	err := r.pool.QueryRow(ctx, query, username).Scan(
+		&selected.ID,
+		&selected.Username,
+		&selected.Timezone,
+		&selected.CreatedAt,
+		&passwordHash,
+	)
+
+	if err != nil {
+		return auth.User{}, "", err
+	}
+
+	return selected, passwordHash, nil
+
+}

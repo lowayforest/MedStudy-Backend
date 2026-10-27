@@ -45,6 +45,12 @@ func TestUserRepositoryCreateIntegration(t *testing.T) {
 		t.Fatal("数据库应保存传入的 Argon2id 哈希，不能保存明文密码")
 	}
 
+	// 登录查询应使用数据库的规范化用户名规则，而不是只按显示名精确匹配。
+	found, foundHash, err := repo.FindByUsername(ctx, "  ALICE  ")
+	if err != nil || found != created || foundHash != passwordHash {
+		t.Fatal("应按规范化用户名找到同一用户及其密码哈希，供登录服务验证")
+	}
+
 	// 数据库会规范化用户名，因此大小写不同的同名用户也不能重复注册。
 	_, err = repo.CreateUser(ctx, auth.CreateUserInput{
 		Username: "alice", PasswordHash: passwordHash, Timezone: "Asia/Shanghai",
