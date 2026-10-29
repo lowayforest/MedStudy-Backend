@@ -376,7 +376,7 @@ go test ./...
 学习：
 
 - 密码只保存 Argon2id 哈希，不能加密后可逆保存。
-- 短期 access token 与可轮换 refresh session 的职责。
+- 短期 JWT access token 与可轮换 refresh session 的职责。
 - Bearer token、HttpOnly/Secure/SameSite Cookie、CORS 和 CSRF 的关系。
 - 认证回答“你是谁”，授权回答“你能操作什么”。
 - 加密、哈希、编码不是一回事。

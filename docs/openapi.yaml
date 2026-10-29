@@ -1077,7 +1077,7 @@ components:
     bearerAuth:
       type: http
       scheme: bearer
-      bearerFormat: opaque-access-token
+      bearerFormat: JWT
     refreshCookie:
       type: apiKey
       in: cookie
