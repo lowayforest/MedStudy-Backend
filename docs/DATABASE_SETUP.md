@@ -124,7 +124,7 @@ bash scripts/verify_schema.sh
 
 本地配置由 `internal/config.LoadFile` 读取，连接由 `internal/platform/postgres.Open` 验证。两者已组装进 `cmd/api.run`，2026-10-11 用户确认实际启动验收成功。真实 `.env` 保持被 Git 忽略，只提交无秘密的 [.env.example](../.env.example)。
 
-本地文件应包含 `DATABASE_URL` 与 `POSTGRES_PASSWORD`：连接地址不内嵌密码，密码单独保存。保留已有正确密码，不用为运行测试复制或修改密码。当前本机连接地址使用端口 `13445`；`sslmode=disable` 仅用于本机开发，不作为生产 TLS 配置。
+本地文件应包含 `DATABASE_URL`、`POSTGRES_PASSWORD` 与 `JWT_SIGNING_KEY_BASE64`：连接地址不内嵌密码，密码单独保存；JWT 项存标准 Base64 编码的随机密钥，解码后至少 32 字节。保留已有正确密码，不用为运行测试复制或修改密码。当前本机连接地址使用端口 `13445`；`sslmode=disable` 仅用于本机开发，不作为生产 TLS 配置。仅验证数据库连接的集成测试只需要前两个数据库字段。
 
 在项目根目录运行：
 

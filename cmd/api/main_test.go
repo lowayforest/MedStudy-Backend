@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"fmt"
 	"net"
 	"os"
@@ -8,6 +9,12 @@ import (
 	"strings"
 	"testing"
 )
+
+// withStartupJWTSigningKey 为启动测试加入固定的假签名密钥，不依赖真实 .env。
+func withStartupJWTSigningKey(content string) string {
+	key := base64.StdEncoding.EncodeToString([]byte("0123456789abcdef0123456789abcdef"))
+	return content + "JWT_SIGNING_KEY_BASE64='" + key + "'\n"
+}
 
 // TestRunMissingConfig 验证指定配置文件不存在时，run 返回错误而不是继续启动服务。
 // 只使用临时目录中的不存在路径，不读取真实 .env，不连接数据库。
@@ -27,11 +34,11 @@ func TestRunInvalidConfig(t *testing.T) {
 		content string
 	}{
 		// 有密码但缺少数据库地址：不能初始化数据库，应返回错误。
-		{name: "missing_database_url", content: "POSTGRES_PASSWORD='" + fakePassword + "'\n"},
+		{name: "missing_database_url", content: withStartupJWTSigningKey("POSTGRES_PASSWORD='" + fakePassword + "'\n")},
 		// 有地址但密码为空：不能继续启动 HTTP 服务，应返回错误。
-		{name: "empty_password", content: "DATABASE_URL='postgres://fixture@127.0.0.1:1/fixture'\nPOSTGRES_PASSWORD=''\n"},
+		{name: "empty_password", content: withStartupJWTSigningKey("DATABASE_URL='postgres://fixture@127.0.0.1:1/fixture'\nPOSTGRES_PASSWORD=''\n")},
 		// 密码引号未闭合：解析失败，应返回受控错误，不暴露原始密码行。
-		{name: "malformed_file", content: "POSTGRES_PASSWORD='" + fakePassword + "\n"},
+		{name: "malformed_file", content: withStartupJWTSigningKey("POSTGRES_PASSWORD='" + fakePassword + "\n")},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -67,7 +74,7 @@ func TestRunDatabaseFailure(t *testing.T) {
 	const existingPassword = "existing-startup-fixture-password"
 	t.Setenv("PGPASSWORD", existingPassword)
 	const filePassword = "file-startup-fixture-password"
-	content := fmt.Sprintf("DATABASE_URL='postgres://fixture@%s/fixture?sslmode=disable'\nPOSTGRES_PASSWORD='%s'\n", listener.Addr(), filePassword)
+	content := withStartupJWTSigningKey(fmt.Sprintf("DATABASE_URL='postgres://fixture@%s/fixture?sslmode=disable'\nPOSTGRES_PASSWORD='%s'\n", listener.Addr(), filePassword))
 	filename := writeStartupConfig(t, content)
 	err = run(filename)
 	if err == nil {

@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/lowayforest/MedStudy-Backend/internal/config"
+	"github.com/joho/godotenv"
 )
 
 // TestOpenRejectsInvalidConnectionString 验证无效地址使 Open 返回错误和 nil 连接池。
@@ -132,13 +133,16 @@ func TestOpenIntegration(t *testing.T) {
 	password := os.Getenv("PGPASSWORD")
 	if filename := os.Getenv("MEDSTUDY_TEST_ENV_FILE"); filename != "" {
 		// 指定配置文件时，以该文件的地址和密码为准，不在日志中展示凭据。
-		cfg, err := config.LoadFile(filename)
+		values, err := godotenv.Read(filename)
 		if err != nil {
 			t.Fatal("读取测试配置失败，请检查指定文件及 DATABASE_URL、POSTGRES_PASSWORD；不要公开密码")
 		}
-		connString = cfg.DatabaseURL
+		connString = strings.TrimSpace(values["DATABASE_URL"])
 		// 密码作为参数传入 Open，不设置进程环境，也不拼进连接字符串。
-		password = cfg.DatabasePassword
+		password = values["POSTGRES_PASSWORD"]
+		if connString == "" || password == "" {
+			t.Fatal("测试配置缺少 DATABASE_URL 或 POSTGRES_PASSWORD；不要公开配置内容")
+		}
 	}
 	if connString == "" {
 		t.Skip("未设置 MEDSTUDY_TEST_ENV_FILE 或 MEDSTUDY_TEST_DATABASE_URL，真实数据库连接尚未验收")
