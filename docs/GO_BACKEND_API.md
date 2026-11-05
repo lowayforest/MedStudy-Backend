@@ -67,7 +67,7 @@ Authorization: Bearer <access-token>
 
 access token 使用 HS256 签名，`sub` 为用户 ID，`iss` 为 `medstudy-backend`，`aud` 为 `medstudy-api`，并包含 `iat` 和 `exp`。服务端必须验证签名算法、签名、签发方、接收方和过期时间；token 不包含密码等敏感信息。签名密钥从运行时配置 `JWT_SIGNING_KEY_BASE64` 解码，解码后至少为 32 字节随机数据，不写入仓库。Base64 只是编码，不会保护密钥。
 
-refresh token 仍为随机 token，只存在 `HttpOnly; Secure; SameSite=Strict` Cookie 中，数据库只保存 token 哈希。前端不得把 access/refresh token 写入 localStorage。退出登录会吊销 refresh session；已签发的 JWT 在自身过期前仍可能有效。
+refresh token 使用安全随机源生成 32 字节，再编码为不带填充的 URL 安全 Base64 字符串。它只存在 `HttpOnly; Secure; SameSite=Strict` Cookie 中，数据库只保存对该字符串计算的 SHA-256 哈希。前端不得把 access/refresh token 写入 localStorage。退出登录会吊销 refresh session；已签发的 JWT 在自身过期前仍可能有效。
 
 除健康检查、注册、登录、刷新外，本文接口默认需要认证。
 
