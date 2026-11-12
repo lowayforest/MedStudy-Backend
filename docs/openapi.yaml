@@ -3,15 +3,16 @@ info:
   title: MedStudy API
   version: 1.0.0-draft
   description: >-
-    Contract-first API for the Go backend. Timestamps are Unix epoch milliseconds
-    for compatibility with the existing React application.
+    MedStudy Go 后端的目标接口契约，可直接导入 Apifox 查看和调试。
+    当前只有 GET /health/live 已注册到本地 HTTP 路由，其余接口仍在开发或设计中。
+    时间戳统一使用 Unix 毫秒。
 servers:
-  - url: http://localhost:8080
-    description: Local
+  - url: http://127.0.0.1:11345
+    description: 本地开发
   - url: https://api-staging.medstudy.a-void.cn
-    description: Staging
+    description: 规划中的测试环境
   - url: https://api.medstudy.a-void.cn
-    description: Production
+    description: 规划中的生产环境
 tags:
   - name: System
   - name: Auth
@@ -33,7 +34,9 @@ paths:
   /health/live:
     get:
       tags: [System]
+      summary: 存活检查
       operationId: live
+      x-apifox-status: tested
       security: []
       responses:
         "200":
@@ -45,7 +48,9 @@ paths:
   /health/ready:
     get:
       tags: [System]
+      summary: 依赖就绪检查
       operationId: ready
+      x-apifox-status: designing
       security: []
       responses:
         "200":
@@ -59,7 +64,9 @@ paths:
   /api/v1/version:
     get:
       tags: [System]
+      summary: 查看服务版本
       operationId: getVersion
+      x-apifox-status: designing
       security: []
       responses:
         "200":
@@ -71,7 +78,9 @@ paths:
   /api/v1/auth/register:
     post:
       tags: [Auth]
+      summary: 注册并创建登录会话
       operationId: register
+      x-apifox-status: developing
       security: []
       requestBody:
         required: true
@@ -79,6 +88,10 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/RegisterRequest"
+            example:
+              username: demo
+              password: Example!Password2026
+              timezone: Asia/Shanghai
       responses:
         "201":
           description: Registered and signed in
@@ -96,7 +109,9 @@ paths:
   /api/v1/auth/login:
     post:
       tags: [Auth]
+      summary: 登录并创建会话
       operationId: login
+      x-apifox-status: developing
       security: []
       requestBody:
         required: true
@@ -104,6 +119,9 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/LoginRequest"
+            example:
+              username: demo
+              password: Example!Password2026
       responses:
         "200":
           description: Signed in
@@ -123,7 +141,9 @@ paths:
   /api/v1/auth/refresh:
     post:
       tags: [Auth]
+      summary: 刷新访问令牌并轮换会话
       operationId: refreshSession
+      x-apifox-status: developing
       security:
         - refreshCookie: []
       responses:
@@ -143,7 +163,9 @@ paths:
   /api/v1/auth/logout:
     post:
       tags: [Auth]
+      summary: 退出登录并吊销会话
       operationId: logout
+      x-apifox-status: designing
       security:
         - refreshCookie: []
       responses:
@@ -154,7 +176,9 @@ paths:
   /api/v1/me:
     get:
       tags: [Account]
+      summary: 查看当前用户
       operationId: getMe
+      x-apifox-status: designing
       responses:
         "200":
           description: Current account
@@ -166,7 +190,9 @@ paths:
           $ref: "#/components/responses/Error"
     patch:
       tags: [Account]
+      summary: 更新个人资料
       operationId: updateMe
+      x-apifox-status: designing
       requestBody:
         required: true
         content:
@@ -189,7 +215,9 @@ paths:
   /api/v1/me/ai-credential:
     put:
       tags: [Account]
+      summary: 保存个人 AI 密钥
       operationId: putAICredential
+      x-apifox-status: designing
       requestBody:
         required: true
         content:
@@ -212,7 +240,9 @@ paths:
           $ref: "#/components/responses/Error"
     delete:
       tags: [Account]
+      summary: 删除个人 AI 密钥
       operationId: deleteAICredential
+      x-apifox-status: designing
       responses:
         "204": { description: Personal AI credential removed }
         default:
@@ -220,7 +250,9 @@ paths:
   /api/v1/bootstrap:
     get:
       tags: [Bootstrap]
+      summary: 获取前端兼容快照
       operationId: getBootstrap
+      x-apifox-status: designing
       responses:
         "200":
           description: Full compatibility snapshot for the current account
@@ -233,7 +265,9 @@ paths:
   /api/v1/folders:
     get:
       tags: [Folders]
+      summary: 查询资料夹列表
       operationId: listFolders
+      x-apifox-status: designing
       parameters:
         - $ref: "#/components/parameters/FolderType"
       responses:
@@ -247,13 +281,18 @@ paths:
           $ref: "#/components/responses/Error"
     post:
       tags: [Folders]
+      summary: 创建资料夹
       operationId: createFolder
+      x-apifox-status: developing
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: "#/components/schemas/FolderInput"
+            example:
+              name: 口腔解剖
+              type: material
       responses:
         "201":
           description: Folder created
@@ -268,7 +307,9 @@ paths:
       - $ref: "#/components/parameters/FolderID"
     get:
       tags: [Folders]
+      summary: 查看资料夹详情
       operationId: getFolder
+      x-apifox-status: designing
       responses:
         "200":
           description: Folder detail
@@ -280,7 +321,9 @@ paths:
         default: { $ref: "#/components/responses/Error" }
     patch:
       tags: [Folders]
+      summary: 重命名资料夹
       operationId: updateFolder
+      x-apifox-status: designing
       requestBody:
         required: true
         content:
@@ -300,14 +343,18 @@ paths:
         default: { $ref: "#/components/responses/Error" }
     delete:
       tags: [Folders]
+      summary: 删除资料夹
       operationId: deleteFolder
+      x-apifox-status: designing
       responses:
         "204": { description: Folder and its documents deleted }
         default: { $ref: "#/components/responses/Error" }
   /api/v1/documents:
     get:
       tags: [Documents]
+      summary: 查询文档列表
       operationId: listDocuments
+      x-apifox-status: designing
       parameters:
         - $ref: "#/components/parameters/FolderIDQuery"
         - $ref: "#/components/parameters/FolderType"
@@ -325,7 +372,9 @@ paths:
         default: { $ref: "#/components/responses/Error" }
     post:
       tags: [Documents]
+      summary: 根据文本创建文档
       operationId: createDocumentFromText
+      x-apifox-status: designing
       requestBody:
         required: true
         content:
@@ -341,7 +390,9 @@ paths:
   /api/v1/documents/import:
     post:
       tags: [Documents]
+      summary: 批量导入文档
       operationId: importDocuments
+      x-apifox-status: designing
       requestBody:
         required: true
         content:
@@ -370,7 +421,9 @@ paths:
       - $ref: "#/components/parameters/DocumentID"
     get:
       tags: [Documents]
+      summary: 查看文档详情
       operationId: getDocument
+      x-apifox-status: designing
       responses:
         "200":
           description: Document with full content
@@ -380,7 +433,9 @@ paths:
         default: { $ref: "#/components/responses/Error" }
     patch:
       tags: [Documents]
+      summary: 更新文档
       operationId: updateDocument
+      x-apifox-status: designing
       requestBody:
         required: true
         content:
@@ -400,14 +455,18 @@ paths:
         default: { $ref: "#/components/responses/Error" }
     delete:
       tags: [Documents]
+      summary: 删除文档
       operationId: deleteDocument
+      x-apifox-status: designing
       responses:
         "204": { description: Document deleted }
         default: { $ref: "#/components/responses/Error" }
   /api/v1/flashcards:
     get:
       tags: [Flashcards]
+      summary: 查询智能卡片列表
       operationId: listFlashcards
+      x-apifox-status: designing
       parameters:
         - { name: due, in: query, schema: { type: boolean } }
         - { name: weak, in: query, schema: { type: boolean } }
@@ -425,7 +484,9 @@ paths:
   /api/v1/flashcards/bulk:
     post:
       tags: [Flashcards]
+      summary: 批量创建智能卡片
       operationId: createFlashcards
+      x-apifox-status: designing
       description: >-
         Deduplicate within the current user and within the batch. Match a complete
         originType/originId key first, then fall back to NFKC, trim, lowercase and
@@ -459,7 +520,9 @@ paths:
       - $ref: "#/components/parameters/CardID"
     get:
       tags: [Flashcards]
+      summary: 查看智能卡片详情
       operationId: getFlashcard
+      x-apifox-status: designing
       responses:
         "200":
           description: Card detail
@@ -469,7 +532,9 @@ paths:
         default: { $ref: "#/components/responses/Error" }
     patch:
       tags: [Flashcards]
+      summary: 更新智能卡片
       operationId: updateFlashcard
+      x-apifox-status: designing
       requestBody:
         required: true
         content:
@@ -490,16 +555,20 @@ paths:
         default: { $ref: "#/components/responses/Error" }
     delete:
       tags: [Flashcards]
+      summary: 删除智能卡片
       operationId: deleteFlashcard
+      x-apifox-status: designing
       responses:
-        "204": { description: Card, card reviews and error links deleted }
+        "204": { description: "Card, card reviews and error links deleted" }
         default: { $ref: "#/components/responses/Error" }
   /api/v1/flashcards/{cardId}/reviews:
     parameters:
       - $ref: "#/components/parameters/CardID"
     post:
       tags: [Reviews]
+      summary: 记录智能卡片复习
       operationId: reviewFlashcard
+      x-apifox-status: designing
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -522,7 +591,9 @@ paths:
   /api/v1/review-history:
     get:
       tags: [Reviews]
+      summary: 查询复习记录
       operationId: listReviewHistory
+      x-apifox-status: designing
       parameters:
         - { name: from, in: query, schema: { $ref: "#/components/schemas/Timestamp" } }
         - { name: to, in: query, schema: { $ref: "#/components/schemas/Timestamp" } }
@@ -538,7 +609,9 @@ paths:
         default: { $ref: "#/components/responses/Error" }
     post:
       tags: [Reviews]
+      summary: 创建复习事件
       operationId: createReviewEvent
+      x-apifox-status: designing
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -556,7 +629,9 @@ paths:
   /api/v1/quick-quizzes:
     get:
       tags: [Quick quizzes]
+      summary: 查询快刷题列表
       operationId: listQuickQuizzes
+      x-apifox-status: designing
       parameters:
         - { name: reviewed, in: query, schema: { type: boolean } }
         - $ref: "#/components/parameters/FolderIDQuery"
@@ -572,7 +647,9 @@ paths:
   /api/v1/quick-quizzes/bulk:
     post:
       tags: [Quick quizzes]
+      summary: 批量创建快刷题
       operationId: createQuickQuizzes
+      x-apifox-status: designing
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -601,7 +678,9 @@ paths:
       - $ref: "#/components/parameters/QuizID"
     get:
       tags: [Quick quizzes]
+      summary: 查看快刷题详情
       operationId: getQuickQuiz
+      x-apifox-status: designing
       responses:
         "200":
           description: Quiz detail
@@ -611,7 +690,9 @@ paths:
         default: { $ref: "#/components/responses/Error" }
     patch:
       tags: [Quick quizzes]
+      summary: 更新快刷题
       operationId: updateQuickQuiz
+      x-apifox-status: designing
       requestBody:
         required: true
         content:
@@ -626,7 +707,9 @@ paths:
         default: { $ref: "#/components/responses/Error" }
     delete:
       tags: [Quick quizzes]
+      summary: 删除快刷题
       operationId: deleteQuickQuiz
+      x-apifox-status: designing
       responses:
         "204": { description: Quiz deleted }
         default: { $ref: "#/components/responses/Error" }
@@ -635,7 +718,9 @@ paths:
       - $ref: "#/components/parameters/QuizID"
     post:
       tags: [Quick quizzes, Reviews]
+      summary: 记录快刷题练习
       operationId: reviewQuickQuiz
+      x-apifox-status: designing
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -658,7 +743,9 @@ paths:
   /api/v1/errors:
     get:
       tags: [Errors]
+      summary: 查询错题列表
       operationId: listErrors
+      x-apifox-status: designing
       parameters:
         - $ref: "#/components/parameters/FolderIDQuery"
         - { name: hasFlashcard, in: query, schema: { type: boolean } }
@@ -673,7 +760,9 @@ paths:
         default: { $ref: "#/components/responses/Error" }
     post:
       tags: [Errors]
+      summary: 新增错题
       operationId: createError
+      x-apifox-status: designing
       requestBody:
         required: true
         content:
@@ -694,7 +783,9 @@ paths:
   /api/v1/errors/actions/generate-missing-flashcards:
     post:
       tags: [Errors, AI]
+      summary: 为缺少卡片的错题生成卡片
       operationId: generateMissingErrorFlashcards
+      x-apifox-status: designing
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -719,7 +810,9 @@ paths:
       - $ref: "#/components/parameters/ErrorID"
     get:
       tags: [Errors]
+      summary: 查看错题详情
       operationId: getError
+      x-apifox-status: designing
       responses:
         "200":
           description: Error question detail
@@ -729,7 +822,9 @@ paths:
         default: { $ref: "#/components/responses/Error" }
     patch:
       tags: [Errors]
+      summary: 更新错题
       operationId: updateError
+      x-apifox-status: designing
       requestBody:
         required: true
         content:
@@ -744,7 +839,9 @@ paths:
         default: { $ref: "#/components/responses/Error" }
     delete:
       tags: [Errors]
+      summary: 删除错题
       operationId: deleteError
+      x-apifox-status: designing
       responses:
         "204": { description: Error and links deleted; cards retained }
         default: { $ref: "#/components/responses/Error" }
@@ -753,7 +850,9 @@ paths:
       - $ref: "#/components/parameters/ErrorID"
     post:
       tags: [Errors, AI]
+      summary: 为错题创建卡片
       operationId: createErrorFlashcard
+      x-apifox-status: designing
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -775,7 +874,9 @@ paths:
   /api/v1/ai/study-cards:
     post:
       tags: [AI]
+      summary: AI 生成学习卡片
       operationId: generateStudyCards
+      x-apifox-status: designing
       requestBody:
         required: true
         content:
@@ -791,7 +892,9 @@ paths:
   /api/v1/ai/simulated-questions:
     post:
       tags: [AI]
+      summary: AI 生成模拟题
       operationId: generateSimulatedQuestions
+      x-apifox-status: designing
       requestBody:
         required: true
         content:
@@ -807,7 +910,9 @@ paths:
   /api/v1/ai/exams:
     post:
       tags: [AI]
+      summary: AI 生成试卷
       operationId: generateExam
+      x-apifox-status: designing
       requestBody:
         required: true
         content:
@@ -823,7 +928,9 @@ paths:
   /api/v1/ai/errors/analyze:
     post:
       tags: [AI]
+      summary: AI 分析错题
       operationId: analyzeError
+      x-apifox-status: designing
       requestBody:
         required: true
         content:
@@ -856,7 +963,9 @@ paths:
   /api/v1/ai/question-card:
     post:
       tags: [AI, Flashcards]
+      summary: AI 生成题目卡片
       operationId: generateQuestionCard
+      x-apifox-status: designing
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -874,7 +983,9 @@ paths:
   /api/v1/ai/weak-points:
     post:
       tags: [AI]
+      summary: AI 分析薄弱点
       operationId: analyzeWeakPoints
+      x-apifox-status: designing
       requestBody:
         required: false
         content:
@@ -898,7 +1009,9 @@ paths:
   /api/v1/ai/reinforcement-exercises:
     post:
       tags: [AI]
+      summary: AI 生成强化练习
       operationId: generateReinforcementExercises
+      x-apifox-status: designing
       requestBody:
         required: true
         content:
@@ -914,7 +1027,9 @@ paths:
   /api/v1/dashboard:
     get:
       tags: [Dashboard]
+      summary: 获取学习看板
       operationId: getDashboard
+      x-apifox-status: designing
       parameters:
         - { name: days, in: query, schema: { type: integer, minimum: 1, maximum: 90, default: 7 } }
         - { name: timezone, in: query, schema: { type: string } }
@@ -928,7 +1043,9 @@ paths:
   /api/v1/backups/export:
     get:
       tags: [Backups]
+      summary: 导出备份
       operationId: exportBackup
+      x-apifox-status: designing
       responses:
         "200":
           description: Complete medstudy-backup JSON attachment
@@ -941,7 +1058,9 @@ paths:
   /api/v1/backups/import/preview:
     post:
       tags: [Backups]
+      summary: 预览备份导入
       operationId: previewBackupImport
+      x-apifox-status: designing
       requestBody:
         required: true
         content:
@@ -957,7 +1076,9 @@ paths:
   /api/v1/backups/import:
     post:
       tags: [Backups]
+      summary: 导入备份
       operationId: importBackup
+      x-apifox-status: designing
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -980,7 +1101,9 @@ paths:
   /api/v1/backups/safety:
     get:
       tags: [Backups]
+      summary: 查询安全备份
       operationId: listSafetyBackups
+      x-apifox-status: designing
       parameters:
         - $ref: "#/components/parameters/Cursor"
         - $ref: "#/components/parameters/Limit"
@@ -996,7 +1119,9 @@ paths:
       - $ref: "#/components/parameters/BackupID"
     get:
       tags: [Backups]
+      summary: 查看安全备份详情
       operationId: getSafetyBackup
+      x-apifox-status: designing
       responses:
         "200":
           description: Safety backup metadata and summary
@@ -1009,7 +1134,9 @@ paths:
       - $ref: "#/components/parameters/BackupID"
     get:
       tags: [Backups]
+      summary: 下载安全备份
       operationId: downloadSafetyBackup
+      x-apifox-status: designing
       responses:
         "200":
           description: Complete safety snapshot attachment
@@ -1022,7 +1149,9 @@ paths:
       - $ref: "#/components/parameters/BackupID"
     post:
       tags: [Backups]
+      summary: 恢复安全备份
       operationId: restoreSafetyBackup
+      x-apifox-status: designing
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       responses:
@@ -1035,7 +1164,9 @@ paths:
   /api/v1/migrations/legacy/preview:
     post:
       tags: [Migration]
+      summary: 预览旧数据迁移
       operationId: previewLegacyMigration
+      x-apifox-status: designing
       requestBody:
         required: true
         content:
@@ -1051,7 +1182,9 @@ paths:
   /api/v1/migrations/legacy/import:
     post:
       tags: [Migration]
+      summary: 导入旧数据
       operationId: importLegacyData
+      x-apifox-status: designing
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:

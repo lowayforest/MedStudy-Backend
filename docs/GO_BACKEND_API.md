@@ -38,7 +38,7 @@
 ```text
 生产：https://api.medstudy.a-void.cn/api/v1
 测试：https://api-staging.medstudy.a-void.cn/api/v1
-本地：http://localhost:8080/api/v1
+本地：http://127.0.0.1:11345/api/v1
 ```
 
 健康检查位于版本前缀外：`/health/live`、`/health/ready`。

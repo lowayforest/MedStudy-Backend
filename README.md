@@ -18,6 +18,7 @@ MedStudy 的独立 Go 后端项目。现有 React 前端位于相邻但完全独
 - [数据库详细设计：字段、关系、约束与事务](docs/DATABASE_DESIGN.md)
 - [API 接口契约](docs/GO_BACKEND_API.md)
 - [OpenAPI 3.1](docs/openapi.yaml)
+- [Apifox 导入与本地调试](docs/APIFOX.md)
 - [Git 分支入门](docs/GIT_BRANCH_GUIDE.md)
 
 ## 计划中的技术栈
